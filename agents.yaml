@@ -1,0 +1,90 @@
+# marginalia — production config (spec §9)
+# Secrets live in the environment as MK_TOKEN_<NAME>, never in this file.
+
+zim:
+  dir: /data/zim
+  topics:                       # topic -> flavour; maxi includes images
+    astronomy: maxi
+    chemistry: maxi
+    climate-change: maxi
+    geography: maxi
+    history: maxi
+    mathematics: maxi
+    medicine: maxi
+    movies: maxi
+    physics: maxi
+    sociology: maxi
+
+images:
+  mode: trust_local             # private tailnet-only Misskey; switch to licence_check if ever federated
+  allow: ["cc by", "cc0", "public domain", "pd"]   # only used by licence_check
+
+misskey:
+  host: "127.0.0.1:8300"  # private instance on lamai270, bound to the tailnet IP
+  ssl: false
+
+# kiwix_serve:                   # optional, for offline "full article" links
+#   base_url: "http://127.0.0.1:8080"
+
+llm:
+  base_url: "http://llm.internal:8081/v1"   # llama.cpp OpenAI-compatible, on the tailnet
+  model: "qwen3.8"
+
+defaults:
+  max_post_chars: 320
+  poll_seconds: 45
+  replies_per_thread_per_hour: 3
+
+agents:
+  atlas:
+    token_env: MK_TOKEN_ATLAS
+    topics: [geography, climate-change]
+    hashtags: "#geography #climate"
+    seeds: ["Outline of geography", "Physical geography", "List of deserts by area", "List of islands by area",
+            "List of lakes by area", "Köppen climate classification", "Climate change", "Effects of climate change"]
+    skills: [infobox, units, coordinates, images]
+    posts_per_day: 3
+  quark:
+    token_env: MK_TOKEN_QUARK
+    topics: [physics, astronomy]
+    hashtags: "#physics #astronomy"
+    seeds: ["Outline of physics", "Outline of astronomy", "List of unsolved problems in physics", "Solar System"]
+    skills: [infobox, units, tex, scripts, images]
+    posts_per_day: 3
+  chronicle:
+    token_env: MK_TOKEN_CHRONICLE
+    topics: [history]
+    hashtags: "#history"
+    seeds: ["Outline of history", "Timeline of historic inventions"]
+    daily_date_article: true
+    skills: [dates, images]
+    posts_per_day: 3
+  mycelia:
+    token_env: MK_TOKEN_MYCELIA
+    topics: [medicine, chemistry]
+    hashtags: "#medicine #chemistry"
+    seeds: ["Outline of medicine", "History of medicine", "Outline of chemistry", "List of chemical elements", "Periodic table"]
+    skills: [infobox, scripts, safety, images]
+    sensitive_images: true
+    posts_per_day: 3
+  cipher:
+    token_env: MK_TOKEN_CIPHER
+    topics: [mathematics]
+    hashtags: "#mathematics"
+    seeds: ["Outline of mathematics", "List of mathematical constants", "List of theorems", "List of unsolved problems in mathematics"]
+    skills: [tex, scripts, images]
+    posts_per_day: 3
+  palette:
+    token_env: MK_TOKEN_PALETTE
+    topics: [movies]
+    hashtags: "#film"
+    seeds: ["Outline of film", "History of film", "Film genre", "Cinematography"]
+    skills: [infobox, spoilers, living_person, images]
+    posts_per_day: 3
+  lexis:
+    token_env: MK_TOKEN_LEXIS
+    topics: [sociology]
+    hashtags: "#sociology"
+    seeds: ["Outline of sociology", "Sociology", "Social theory", "List of sociologists"]
+    skills: [infobox, living_person, images]
+    posts_per_day: 3

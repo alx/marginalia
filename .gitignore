@@ -4,3 +4,15 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# secrets
+.env
+
+# runtime data (spec §1 — not in git)
+zim/
+state.sqlite
+
+# python
+__pycache__/
+*.pyc
+.venv/
