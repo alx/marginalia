@@ -53,6 +53,23 @@ def test_images_filters_small_and_orders():
     assert imgs[0]["zim_path"].endswith("/File:map.png") or "map.png" in imgs[0]["zim_path"]
 
 
+ASSETS_HTML = """
+<div>
+<figure><img src="./_assets_/0c70a4/Sahara_real_color.jpg" width="272"/></figure>
+<figure><img src="./_assets_/0c70a4/Flag_of_Chad.svg.png" width="23"/></figure>
+</div>
+"""
+
+
+def test_images_assets_build_basename_and_alt_fallback():
+    s = parse(ASSETS_HTML)
+    imgs = images(s, "Sahara")
+    # 23px flag filtered; file comes from the src basename, alt from the stem
+    assert [i["file"] for i in imgs] == ["Sahara_real_color.jpg"]
+    assert imgs[0]["alt"] == "Sahara real color"
+    assert imgs[0]["zim_path"].endswith("_assets_/0c70a4/Sahara_real_color.jpg")
+
+
 def test_math_to_tex():
     s = parse('<p><span class="mwe-math-element"><math>'
               '<annotation encoding="application/x-tex">{\\displaystyle x=1}</annotation></math>'

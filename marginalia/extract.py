@@ -88,7 +88,12 @@ def infobox(soup: BeautifulSoup) -> dict:
 
 
 def images(soup: BeautifulSoup, article_path: str, min_px: int = 200) -> list[dict]:
-    """Picture candidates in reading order: infobox first, then lead figures."""
+    """Picture candidates in reading order: infobox first, then lead figures.
+
+    The build has no `resource` attribute or file-link anchors; images sit under
+    ``_assets_/<hash>/<filename>``, so the real file name is the src basename.
+    A ``File:`` resource (older builds) is still honoured when present.
+    """
     out: list[dict] = []
     for img in soup.select("table.infobox img, figure img"):
         if "mwe-math" in " ".join(img.get("class", [])) or not img.get("src"):
@@ -98,12 +103,18 @@ def images(soup: BeautifulSoup, article_path: str, min_px: int = 200) -> list[di
                 continue  # icons, flags, badges
         except ValueError:
             pass
+        src = unquote(img["src"])
         res = img.get("resource") or (img.find_parent("a") or {}).get("href", "")
+        if "File:" in res:
+            file = unquote(res.split("File:")[-1])
+        else:
+            file = posixpath.basename(src)
+        alt = img.get("alt") or file.rsplit(".", 1)[0].replace("_", " ")
         out.append({
             "zim_path": posixpath.normpath(
-                posixpath.join(posixpath.dirname(article_path), unquote(img["src"]))
+                posixpath.join(posixpath.dirname(article_path), src)
             ),
-            "file": unquote(res.split("File:")[-1]) if "File:" in res else None,
-            "alt": img.get("alt", ""),
+            "file": file or None,
+            "alt": alt,
         })
     return out
