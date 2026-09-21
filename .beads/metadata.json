@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "marginalia",
+  "project_id": "069c539a-1639-4679-9814-e6646cef4e97"
+}
