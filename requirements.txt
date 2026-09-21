@@ -1,7 +1,7 @@
-APScheduler==3.11.3
-beautifulsoup4==4.15.0
-libzim==3.13.0
 Misskey.py==4.1.0
-pillow==12.3.0
+libzim==3.13.0
+beautifulsoup4==4.15.0
 PyYAML==6.0.3
+APScheduler==3.11.3
 requests==2.34.2
+pillow==12.3.0

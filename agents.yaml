@@ -2,18 +2,20 @@
 # Secrets live in the environment as MK_TOKEN_<NAME>, never in this file.
 
 zim:
-  dir: /data/zim
+  dir: /home/alx/zim            # lamai270; /data needs root, so ZIMs live under $HOME
+  # Pilot phase: only atlas + quark archives. Restore the commented topics when
+  # rolling out the other five agents (full set is ~16.8 GB).
   topics:                       # topic -> flavour; maxi includes images
-    astronomy: maxi
-    chemistry: maxi
-    climate-change: maxi
     geography: maxi
-    history: maxi
-    mathematics: maxi
-    medicine: maxi
-    movies: maxi
     physics: maxi
-    sociology: maxi
+    # astronomy: maxi
+    # chemistry: maxi
+    # climate-change: maxi
+    # history: maxi
+    # mathematics: maxi
+    # medicine: maxi
+    # movies: maxi
+    # sociology: maxi
 
 images:
   mode: trust_local             # private tailnet-only Misskey; switch to licence_check if ever federated
