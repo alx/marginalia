@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import posixpath
 import random
+import re
 
 from marginalia import extract, guards, images
 
@@ -185,7 +186,97 @@ def tick(agent) -> str | None:
     return note_id
 
 
-# -- reply loop (spec §6) — issue marginalia-poll --------------------------
-def poll(agent) -> None:
-    """Fetch new mentions, climb to root, ground, answer."""
-    raise NotImplementedError("spec §6 — see issue marginalia-poll")
+# -- reply loop (spec §6) -------------------------------------------------
+_STOP = set("a an the is are was were be to of in on for with about how what why "
+            "when where which do does did this that and or but it its as at by from "
+            "into please can could would should just want would like me my you your "
+            "some any more most tell me about".split())
+
+
+def _keywords(text: str) -> str:
+    """A short content-word query for the search fallback."""
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    kws = [w for w in words if w not in _STOP and len(w) > 2]
+    return " ".join(dict.fromkeys(kws))[:60]
+
+
+def _heading_in(heading: str, text: str) -> bool:
+    """True if the reader's note is clearly about this section heading."""
+    h = heading.lower()
+    if h in text.lower():
+        return True
+    hw = [w for w in re.findall(r"[a-z0-9]+", h) if len(w) > 3]
+    q = text.lower()
+    return bool(hw) and all(w in q for w in hw)
+
+
+def _ground(agent, post, note_text: str) -> str:
+    """Lead + any sections the note is about; full-text search fallback (spec §6)."""
+    lib = agent.lib
+    store = lib.stores.get(post["topic"])
+    chunks: list[str] = []
+    if store:
+        got = store.html(post["path"])
+        if got:
+            soup = extract.parse(got[1])
+            if lead := extract.lead(soup):
+                chunks.append(lead)
+            for h in extract.headings(soup):
+                if _heading_in(h, note_text):
+                    if sec := extract.section(soup, h):
+                        chunks.append(sec)
+    if len(chunks) <= 1:   # lead only -> search the agent's topics
+        for topic, path in lib.search(_keywords(note_text), agent.topics, 2):
+            got = lib.stores[topic].html(path)
+            if got and (lead := extract.lead(extract.parse(got[1]))):
+                chunks.append(lead)
+    return "\n\n".join(chunks)[:4000]
+
+
+def answer(agent, post, n) -> str:
+    """Classify -> ground -> reply (spec §6). Returns the reply text (may be empty)."""
+    llm, text = agent.llm, n.get("text", "")
+    if not text.strip():
+        return ""
+    intent = llm.classify(text)
+    grounded = _ground(agent, post, text)
+    reply = llm.reply(agent.persona, intent, text, grounded)
+    return (reply or "").strip()[:400]
+
+
+def climb_to_root(n, pub, max_hops: int = 6):
+    """Follow replyId up to `max_hops` to the top of the thread."""
+    cur = n
+    for _ in range(max_hops):
+        rid = cur.get("replyId")
+        if not rid:
+            return cur
+        try:
+            cur = pub.note(rid)
+        except Exception:                                  # noqa: BLE001 - deleted note
+            return cur
+    return cur
+
+
+def poll(agent) -> int:
+    """One reply pass: answer new mentions to this agent's posts. Returns count."""
+    db, pub, llm = agent.db, agent.pub, agent.llm
+    if not llm.is_online():
+        return 0
+    since = db.get_cursor(agent.id, "mention_cursor")
+    answered = 0
+    for n in reversed(pub.new_mentions(since)):             # oldest first
+        db.set_cursor(agent.id, "mention_cursor", n["id"])
+        if (n.get("user") or {}).get("isBot") or db.replied(n["id"]):
+            continue                                        # never answer bots / twice
+        root = climb_to_root(n, pub)
+        post = db.post_by_note(root["id"])
+        if not post:
+            continue                                        # not one of our posts
+        reply = answer(agent, post, n)
+        if not reply:
+            continue
+        rid = pub.post(reply, reply_id=n["id"])
+        db.save_reply(n["id"], rid, agent.id)
+        answered += 1
+    return answered

@@ -8,8 +8,8 @@ from __future__ import annotations
 import pytest
 
 from marginalia import extract
-from marginalia.agent import (Agent, _internal_link_paths, path_title, pick_candidate,
-                              tick, wiki_url)
+from marginalia.agent import (Agent, _internal_link_paths, answer, climb_to_root,
+                              path_title, pick_candidate, poll, tick, wiki_url)
 
 LEAD = (
     "The Sahara covers about 9.2 million square kilometres, making it the largest "
@@ -33,12 +33,16 @@ CFG = {
 
 # -- fakes ----------------------------------------------------------------
 def _article(lead, heads, infobox=True):
-    h = f'<html><body><div id="content"><p>{lead}</p>'
+    # realistic mwoffliner shape: lead in section 0, each h2 in its own section
+    h = ('<html><body><div id="content">'
+         f'<section data-mw-section-id="0"><p>{lead}</p>')
     if infobox:
         h += '<table class="infobox"><tbody><tr><td>x</td></tr></tbody></table>'
-    for x in heads:
-        h += f"<h2>{x}</h2><p>body of {x}</p>"
-    return h + "</div></body></html>"
+    h += '</section>'
+    for i, x in enumerate(heads, start=1):
+        h += (f'<section data-mw-section-id="{i}">'
+              f'<h2>{x}</h2><p>body of {x}</p></section>')
+    return h + '</div></body></html>'
 
 
 def _seed(links):
@@ -73,11 +77,17 @@ class FakeLib:
                 return t, self.stores[t].html(title)
         return None
 
+    def search(self, q, topics, n=5):
+        return []
+
 
 class FakeDB:
     def __init__(self):
         self.seen_paths: set[tuple[str, str]] = set()
         self.saved = []
+        self.posts_by_note: dict[str, dict] = {}
+        self.cursors: dict[tuple[str, str], str] = {}
+        self.replies: set[str] = set()
 
     def seen(self, agent, path):
         return (agent, path) in self.seen_paths
@@ -86,12 +96,42 @@ class FakeDB:
                   zim_book, zim_date, title=None):
         self.seen_paths.add((agent, path))
         self.saved.append((agent, topic, path, note_id, build_note_id, image_file))
+        self.posts_by_note[note_id] = {"agent": agent, "topic": topic, "path": path,
+                                       "title": title}
+
+    def post_by_note(self, note_id):
+        return self.posts_by_note.get(note_id)
+
+    def get_cursor(self, agent, key, default=None):
+        return self.cursors.get((agent, key), default)
+
+    def set_cursor(self, agent, key, value):
+        self.cursors[(agent, key)] = str(value)
+
+    def replied(self, note_id):
+        return note_id in self.replies
+
+    def save_reply(self, incoming, reply_id, agent):
+        self.replies.add(incoming)
 
 
 class FakeLLM:
     def __init__(self):
         self.draft = "The Sahara is vast and dry."      # no numbers -> guard passes
         self.calls = 0
+        self.online = True
+        self.classify_result = "question"
+        self.last_ground = None
+
+    def is_online(self):
+        return self.online
+
+    def classify(self, text):
+        return self.classify_result
+
+    def reply(self, persona, intent, question, grounded):
+        self.last_ground = grounded
+        return f"reply({intent}) :: {grounded[:30]}"
 
     def write_post(self, persona, skills, title, source):
         self.calls += 1
@@ -105,6 +145,8 @@ class FakePub:
     def __init__(self):
         self.posts = []
         self.files = []
+        self.notes: dict[str, dict] = {}
+        self.mentions: list[dict] = []
 
     def post(self, text, reply_id=None, file_ids=None, cw=None):
         self.posts.append((text, reply_id, file_ids, cw))
@@ -113,6 +155,12 @@ class FakePub:
     def upload(self, img, sensitive=False):
         self.files.append(img["name"])
         return f"file{len(self.files)}"
+
+    def note(self, note_id):
+        return self.notes[note_id]
+
+    def new_mentions(self, since=None):
+        return [m for m in self.mentions if not since or m["id"] > since]
 
 
 def _agent(store, db, llm, pub):
@@ -217,3 +265,67 @@ def test_tick_skips_when_guard_fails():
     assert tick(agent) is None
     assert pub.posts == []                    # nothing published
     assert llm.calls == 2                     # drafted, retried once, gave up
+
+
+# -- reply loop (spec §6) ---------------------------------------------------
+def _recorded_agent():
+    store = _store_one_article()             # has article "Alpha"
+    db, pub = FakeDB(), FakePub()
+    pub.notes["N1"] = {"id": "N1", "replyId": None}
+    db.save_post("atlas", "geography", "Alpha", "N1", "B1", None,
+                 store.book, store.date, title="Alpha")
+    agent = _agent(store, db, FakeLLM(), pub)
+    return agent, db, pub
+
+
+def test_climb_to_root():
+    pub = FakePub()
+    pub.notes["A"] = {"id": "A", "replyId": None}
+    pub.notes["B"] = {"id": "B", "replyId": "A"}
+    pub.notes["C"] = {"id": "C", "replyId": "B"}
+    root = climb_to_root({"id": "D", "replyId": "C"}, pub)
+    assert root["id"] == "A"
+
+
+def test_poll_replies_to_question():
+    agent, db, pub = _recorded_agent()
+    pub.mentions = [{"id": "m1", "text": "Tell me about One",
+                     "replyId": "N1", "user": {"isBot": False}}]
+    assert poll(agent) == 1
+    text, reply_id, _, _ = pub.posts[0]
+    assert reply_id == "m1"                  # answered in-thread
+    assert "m1" in db.replies
+    assert db.get_cursor("atlas", "mention_cursor") == "m1"
+
+
+def test_poll_skips_bot():
+    agent, db, pub = _recorded_agent()
+    pub.mentions = [{"id": "m1", "text": "hi", "replyId": "N1",
+                     "user": {"isBot": True}}]
+    assert poll(agent) == 0 and pub.posts == []
+
+
+def test_poll_skips_already_replied():
+    agent, db, pub = _recorded_agent()
+    db.replies.add("m1")
+    pub.mentions = [{"id": "m1", "text": "hi", "replyId": "N1",
+                     "user": {"isBot": False}}]
+    assert poll(agent) == 0 and pub.posts == []
+
+
+def test_poll_skips_post_we_never_made():
+    agent, db, pub = _recorded_agent()
+    pub.notes["X1"] = {"id": "X1", "replyId": None}
+    pub.mentions = [{"id": "m1", "text": "hi", "replyId": "X1",
+                     "user": {"isBot": False}}]
+    assert poll(agent) == 0 and pub.posts == []
+
+
+def test_answer_grounds_named_section():
+    agent, db, pub = _recorded_agent()
+    agent.llm.classify_result = "section_request"
+    post = db.post_by_note("N1")
+    n = {"id": "m1", "text": "Tell me about Two", "replyId": "N1", "user": {}}
+    reply = answer(agent, post, n)
+    assert reply
+    assert "body of Two" in agent.llm.last_ground    # the section was pulled in
