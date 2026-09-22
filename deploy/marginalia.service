@@ -1,0 +1,25 @@
+# Marginalia scheduler service (spec §9) — one process, all agents.
+# Install on lamai270:
+#   sudo cp deploy/marginalia.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now marginalia
+#
+# The monthly ZIM refresh is a cron job *inside* the scheduler (run.py),
+# so no separate systemd timer is needed.
+
+[Unit]
+Description=Marginalia — seven Wikipedia bots on Misskey
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alx
+WorkingDirectory=/home/alx/code/marginalia
+# .env holds MK_TOKEN_* (chmod 600, never in git)
+EnvironmentFile=-/home/alx/code/marginalia/.env
+ExecStart=/home/alx/code/marginalia/.venv/bin/python -m marginalia.run
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
