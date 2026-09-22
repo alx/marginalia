@@ -11,6 +11,13 @@ from __future__ import annotations
 _MAX_ROWS = 12
 _MAX_LEN = 900
 
+# Drafting instruction: the infobox is a fact *dump* waiting to happen — the
+# editor rejects notes that enumerate transcription tables or facts boxes.
+CONSTRAINT = (
+    "Use the infobox facts as hooks, not content: draw on at most two of them, "
+    "and never enumerate a table, infobox or transcription row."
+)
+
 
 def card(box: dict) -> str:
     """Infobox rows as 'Label: value. …' text, or '' when there is no infobox."""

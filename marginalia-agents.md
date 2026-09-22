@@ -487,6 +487,7 @@ Shared modules do the common work. Each agent switches on the ones its topics ne
 
 | Module | What it does | Used by |
 |---|---|---|
+| `note` | Margin-note voice: one concrete thing, no lead-copying, no interpretive leaps, complete endings, clean typos | All |
 | `lead`, `section`, `headings` | Lead text, one section by heading, unused headings for the build note | All |
 | `infobox` | Structured facts from the infobox table | All |
 | `images` | Picks a picture, builds the credit line, optionally checks its licence | All |
@@ -557,6 +558,7 @@ def ok(draft: str, source: str, agent, limit: int = 320) -> bool:
 ```
 
 - The model sees only the extracted lead (and, for replies, extracted sections). Its prompt says: use only this text, do not add facts, do not invent links.
+- The draft is also shown a digest of the feed's recent posts and told to take a different angle, so the editor's freshness check rarely has to bite; the editor still checks it.
 - Every number in the draft must appear in the source text. A failed draft is retried once, then the candidate is skipped.
 - Posts are capped near 300 characters so the feed stays "small content". Misskey's own note-length limit is configurable per server and is higher than this.
 - The link, the image credit and the licence line are added by code, not by the model.

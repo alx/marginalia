@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 
 from marginalia import guards
-from marginalia.agent import finalize
+from marginalia.agent import finalize, recent_digest
 
 log = logging.getLogger("marginalia.editorial")
 
@@ -85,11 +85,7 @@ class Editorial:
 
     def _recent(self, db, agent_id: str, n: int = 15) -> str:
         """A short digest of the most recent posts, for the duplication check."""
-        out = []
-        for r in db.recent_posts(n):
-            text = (r.get("text") or r.get("title") or "").replace("\n", " ")[:140]
-            out.append(f"- [{r['agent']}] {r.get('title') or ''}: {text}")
-        return "\n".join(out)
+        return recent_digest(db, n) or ""
 
     def _escalate(self, agent, epic, topic, path, title, draft, concerns) -> str | None:
         """Post the draft as a pending note under the editor account.

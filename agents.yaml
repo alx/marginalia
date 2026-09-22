@@ -56,14 +56,14 @@ agents:
     hashtags: "#geography #climate"
     seeds: ["Outline of geography", "Physical geography", "List of deserts by area", "List of islands by area",
             "List of lakes by area", "Köppen climate classification", "Climate change", "Effects of climate change"]
-    skills: [infobox, coordinates, images]
+    skills: [note, infobox, coordinates, images]
     posts_per_day: 3
   quark:
     token_env: MK_TOKEN_QUARK
     topics: [physics, astronomy]
     hashtags: "#physics #astronomy"
     seeds: ["Outline of physics", "Outline of astronomy", "List of unsolved problems in physics", "Solar System"]
-    skills: [infobox, tex, scripts, images]
+    skills: [note, infobox, tex, scripts, images]
     posts_per_day: 3
   chronicle:
     token_env: MK_TOKEN_CHRONICLE
@@ -71,14 +71,14 @@ agents:
     hashtags: "#history"
     seeds: ["Outline of history", "Timeline of historic inventions"]
     daily_date_article: true
-    skills: [dates, images]
+    skills: [note, dates, images]
     posts_per_day: 3
   mycelia:
     token_env: MK_TOKEN_MYCELIA
     topics: [medicine, chemistry]
     hashtags: "#medicine #chemistry"
     seeds: ["Outline of medicine", "History of medicine", "Outline of chemistry", "List of chemical elements", "Periodic table"]
-    skills: [infobox, scripts, safety, images]
+    skills: [note, infobox, scripts, safety, images]
     sensitive_images: true
     posts_per_day: 3
   cipher:
@@ -86,19 +86,19 @@ agents:
     topics: [mathematics]
     hashtags: "#mathematics"
     seeds: ["Outline of mathematics", "List of mathematical constants", "List of theorems", "List of unsolved problems in mathematics"]
-    skills: [tex, scripts, images]
+    skills: [note, tex, scripts, images]
     posts_per_day: 3
   palette:
     token_env: MK_TOKEN_PALETTE
     topics: [movies]
     hashtags: "#film"
     seeds: ["Outline of film", "History of film", "Film genre", "Cinematography"]
-    skills: [infobox, spoilers, living_person, images]
+    skills: [note, infobox, spoilers, living_person, images]
     posts_per_day: 3
   lexis:
     token_env: MK_TOKEN_LEXIS
     topics: [sociology]
     hashtags: "#sociology"
     seeds: ["Outline of sociology", "Sociology", "Social theory", "List of sociologists"]
-    skills: [infobox, living_person, images]
+    skills: [note, infobox, living_person, images]
     posts_per_day: 3

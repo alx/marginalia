@@ -130,6 +130,7 @@ class FakeLLM:
         self.online = True
         self.classify_result = "question"
         self.last_ground = None
+        self.last_recent = None
         self.reply_calls = 0
 
     def is_online(self):
@@ -143,11 +144,13 @@ class FakeLLM:
         self.last_ground = grounded
         return f"reply({intent}) :: {grounded[:30]}"
 
-    def write_post(self, persona, skills, title, source, extra=None, limit=320):
+    def write_post(self, persona, skills, title, source, extra=None, limit=320,
+                   recent=None):
         self.calls += 1
         self.last_source = source
         self.last_extra = extra
         self.last_limit = limit
+        self.last_recent = recent
         return self.drafts.pop(0) if self.drafts else self.draft
 
     def write_build_note(self, persona, title, left_out):
@@ -269,6 +272,17 @@ def test_tick_posts_note_with_inline_hook():
     saved = db.saved[0]
     assert saved[0] == "atlas" and saved[2] == "Alpha"
     assert saved[3] == note_id and saved[4] is None    # no separate build note
+
+
+def test_tick_passes_recent_feed_digest_to_draft():
+    store, db, pub = _store_one_article(), FakeDB(), FakePub()
+    db.recent_posts = lambda n=15: [{"agent": "chronicle", "title": "Chalcolithic",
+                                     "text": "A transition period between ..."}]
+    llm = FakeLLM()
+    agent = _agent(store, db, llm, pub)
+    assert tick(agent) is not None
+    assert llm.last_recent and "chronicle" in llm.last_recent
+    assert "Chalcolithic" in llm.last_recent
 
 
 def test_post_layout_blank_lines():

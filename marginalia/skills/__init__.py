@@ -5,6 +5,8 @@ math-to-TeX, unicode sub/superscripts) live in ``extract.py`` / ``images.py``
 because every agent uses them. This package holds the skills that only some
 agents switch on, named exactly as they appear in ``agents.yaml``:
 
+    note           margin-note voice: one concrete thing, no lead-copying,
+                   no interpretive leaps, complete endings (all agents)
     coordinates    decimal coordinate line from the infobox (Atlas)
     dates          on-this-day titles, circa/BCE handling (Chronicle)
     safety         medical guard: advice/dose refusal, general info only (Mycelia)
@@ -20,11 +22,12 @@ and safe to run in the scheduler's thread pool.
 from __future__ import annotations
 
 from marginalia.skills import (coordinates, dates, infobox, living_person,  # noqa: F401
-                               safety, spoilers)
+                               note, safety, spoilers)
 
 # skill name in agents.yaml -> module. Names not listed here (tex, scripts,
 # images) are handled by extract.py / images.py for every agent already.
 ALL = {
+    "note": note,
     "coordinates": coordinates,
     "dates": dates,
     "infobox": infobox,

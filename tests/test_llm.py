@@ -29,6 +29,36 @@ def test_extract_class_defaults_to_other():
     assert extract_class("") == "other"
 
 
+# -- drafting prompt -----------------------------------------------------------
+def test_write_post_without_recent_has_no_digest(monkeypatch):
+    llm = LLM("http://offline.invalid/v1", MODEL)
+    captured = {}
+
+    def fake_complete(system, user, temperature=None, max_tokens=None):
+        captured["system"] = system
+        return "a draft"
+
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    llm.write_post("Atlas", [], "Sahara", "The Sahara is large.")
+    assert "feed" not in captured["system"]
+
+
+def test_write_post_includes_recent_posts_digest(monkeypatch):
+    llm = LLM("http://offline.invalid/v1", MODEL)
+    captured = {}
+
+    def fake_complete(system, user, temperature=None, max_tokens=None):
+        captured["system"] = system
+        return "a draft"
+
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    recent = "- [chronicle] Chalcolithic: A transition period between ..."
+    llm.write_post("Quark", ["note"], "Physics", "Physics is old.", recent=recent)
+    assert "Posts already on the feed" in captured["system"]
+    assert recent in captured["system"]
+    assert "different angle" in captured["system"]
+
+
 # -- editorial verdict parsing ---------------------------------------------
 def test_parse_verdict_clean_json():
     v = parse_verdict('{"approved": false, "concerns": ["a number"], "suggested_revision": "fix"}')

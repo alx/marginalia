@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from bs4 import BeautifulSoup
 
 from marginalia import guards
-from marginalia.agent import Agent
+from marginalia.agent import Agent, _draft_context
 from marginalia.skills import (ALL, coordinates, dates, has, infobox,
-                               living_person, safety, spoilers)
+                               living_person, note, safety, spoilers)
 
 
 # -- coordinates ----------------------------------------------------------------
@@ -121,9 +121,49 @@ def test_infobox_card():
     assert infobox.card({}) == ""
 
 
+# -- note ----------------------------------------------------------------------
+def test_note_constraint_targets_editor_concerns():
+    # the recurring concerns in escalated staging notes, anticipated at drafting
+    c = note.CONSTRAINT.lower()
+    assert "opening paragraph" in c          # no verbatim lead copying
+    assert "one concrete thing" in c         # a margin note, not a summary
+    assert "concluding judgments" in c       # no interpretive leaps past the text
+    assert "typos" in c                      # no carrying over source errors
+    assert "complete sentence" in c          # no cut-off endings
+
+
+def test_infobox_constraint_against_dumps():
+    c = infobox.CONSTRAINT.lower()
+    assert "at most two" in c
+    assert "enumerate" in c
+
+
+def test_draft_context_carries_note_constraint():
+    cfg = {"agents": {"atlas": {"topics": ["geography"], "hashtags": "#geo",
+                               "skills": ["note"]}}}
+    ag = Agent("atlas", cfg, db=None, lib=None, llm=None, pub=None)
+    _, extra = _draft_context(ag, _lead_soup())
+    assert extra and "margin note" in extra.lower()
+
+
+def test_draft_context_carries_infobox_constraint_without_card():
+    cfg = {"agents": {"mycelia": {"topics": ["medicine"], "hashtags": "#med",
+                                 "skills": ["infobox"]}}}
+    ag = Agent("mycelia", cfg, db=None, lib=None, llm=None, pub=None)
+    _, extra = _draft_context(ag, _lead_soup())
+    assert extra and "at most two" in extra
+
+
+def _lead_soup():
+    html = """<html><body>
+    <section data-mw-section-id="0"><p>The lake is 3,718 km&sup2; and 371 m deep.</p></section>
+    </body></html>"""
+    return BeautifulSoup(html, "html.parser")
+
+
 # -- registry ----------------------------------------------------------------------
 def test_registry_matches_yaml_names():
-    assert set(ALL) == {"coordinates", "dates", "safety", "spoilers",
+    assert set(ALL) == {"note", "coordinates", "dates", "safety", "spoilers",
                         "living_person", "infobox"}
     assert has(["infobox", "coordinates"], "coordinates")
     assert not has(None, "coordinates")

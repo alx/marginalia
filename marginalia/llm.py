@@ -80,10 +80,13 @@ class LLM:
 
     # -- drafting (spec §5) -------------------------------------------------
     def write_post(self, persona: str, skills: list[str], title: str, source: str,
-                   extra: str | None = None, limit: int = 320) -> str:
+                   extra: str | None = None, limit: int = 320,
+                   recent: str | None = None) -> str:
         """Draft a post of at most ``limit`` chars, grounded in the text provided.
 
-        ``extra`` carries the active skills' drafting constraints (spec §4.7).
+        ``extra`` carries the active skills' drafting constraints (spec §4.7);
+        ``recent`` is a digest of posts already on the feed, so the draft can
+        avoid restating what the feed has just said (freshness, spec §7).
         """
         system = (
             f"You are {persona}. Write one social-media post of at most {limit} characters, "
@@ -95,6 +98,9 @@ class LLM:
         )
         if extra:
             system += f" Also: {extra}"
+        if recent:
+            system += (f"\nPosts already on the feed:\n{recent}\n"
+                       "Do not repeat or closely restate them; take a different angle.")
         user = (f"Article title: {title}\n\nArticle text:\n{source}\n\n"
                 f"Write the post (at most {limit} characters).")
         return self.complete(system, user, temperature=0.8, max_tokens=limit // 3 + 150)

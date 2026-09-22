@@ -18,6 +18,7 @@ from marginalia.skills import coordinates as sk_coordinates
 from marginalia.skills import dates as sk_dates
 from marginalia.skills import infobox as sk_infobox
 from marginalia.skills import living_person as sk_living_person
+from marginalia.skills import note as sk_note
 from marginalia.skills import safety as sk_safety
 from marginalia.skills import spoilers as sk_spoilers
 
@@ -162,6 +163,10 @@ def _draft_context(agent, soup) -> tuple[str, str | None]:
     box = extract.infobox(soup)
     if skills.has(agent.skills, "infobox") and (card := sk_infobox.card(box)):
         source += f"\nFacts: {card}"
+    if skills.has(agent.skills, "infobox"):
+        extra.append(sk_infobox.CONSTRAINT)
+    if skills.has(agent.skills, "note"):
+        extra.append(sk_note.CONSTRAINT)
     if skills.has(agent.skills, "dates"):
         extra.append(sk_dates.CONSTRAINT)
     if skills.has(agent.skills, "safety"):
@@ -171,6 +176,19 @@ def _draft_context(agent, soup) -> tuple[str, str | None]:
     if skills.has(agent.skills, "living_person") and sk_living_person.is_living(box):
         extra.append(sk_living_person.CONSTRAINT)
     return source, " ".join(extra) or None
+
+
+def recent_digest(db, n: int = 15) -> str | None:
+    """Cross-agent digest of the ``n`` newest posts, for the freshness check.
+
+    Shared by the drafting prompt (so a draft avoids restating what the feed
+    has just said) and the editor gate; ``None`` when the feed is empty.
+    """
+    out = []
+    for r in db.recent_posts(n):
+        text = (r.get("text") or r.get("title") or "").replace("\n", " ")[:140]
+        out.append(f"- [{r['agent']}] {r.get('title') or ''}: {text}")
+    return "\n".join(out) or None
 
 
 def tick(agent) -> str | None:
@@ -201,6 +219,7 @@ def post_article(agent, topic: str, path: str) -> str | None:
 
     source, extra = _draft_context(agent, soup)
     limit = cfg["defaults"]["max_post_chars"]
+    recent = recent_digest(agent.db)                     # freshness at drafting time
     # up to three draft attempts: a longer draft carries more numbers, so the
     # grounding guard rejects more often; each retry is cheap (one LLM call)
     # The model is shown the title too, so its numbers are grounded as well.
@@ -208,7 +227,7 @@ def post_article(agent, topic: str, path: str) -> str | None:
     draft = None
     for _ in range(3):
         d = llm.write_post(agent.persona, agent.skills, title=title, source=source,
-                           extra=extra, limit=limit)
+                           extra=extra, limit=limit, recent=recent)
         if guards.ok(d, grounding, agent, limit):        # grounding / length / safety
             draft = d
             break
