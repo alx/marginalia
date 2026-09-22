@@ -16,3 +16,6 @@ state.sqlite
 __pycache__/
 *.pyc
 .venv/
+
+# Beads / Dolt files (added by bd init)
+*.gate.lock*
