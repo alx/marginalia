@@ -15,6 +15,8 @@ from marginalia.board import Board
 
 @pytest.fixture(scope="module")
 def repo(tmp_path_factory):
+    if shutil.which("bd") is None:
+        pytest.skip("bd (beads) CLI not installed")
     d = tmp_path_factory.mktemp("beads")
     subprocess.run(["git", "init", "-q", "."], cwd=d, check=True)
     r = subprocess.run(["bd", "init", "-p", "tb", "--non-interactive"],
