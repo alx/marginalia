@@ -15,8 +15,10 @@ on:
 jobs:
   test:
     runs-on: [lamai270]
+    # ci/Dockerfile: python + Node 20 (self-hosted runners exec JS actions
+    # inside the job container, so the image must provide `node`).
     container:
-      image: python:3.13-slim
+      image: marginalia-ci:node20
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
