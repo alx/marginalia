@@ -69,3 +69,12 @@ def test_missing_binary_is_a_silent_noop(tmp_path):
     assert b.open_epic("x") is None
     assert b.open_hitls() == []
     b.close(None)                          # must not raise
+
+
+def test_bd_without_repo_is_a_clean_noop(tmp_path):
+    """bd exists but the directory is not a beads repo: warn, never raise."""
+    b = Board(str(tmp_path))          # default binary name; dir has no bd repo
+    if not b.available():
+        pytest.skip("bd binary not installed")
+    assert b.open_epic("Draft: X") is None
+    assert b.open_hitls() == []

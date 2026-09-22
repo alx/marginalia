@@ -3,6 +3,7 @@
 The real State (SQLite) and real Agent run; only the LLM, publishers and the
 beads board are faked. Store/article fakes are shared with test_agent.py.
 """
+import json
 from marginalia.agent import Agent, post_article
 from marginalia.editorial import Editorial
 from marginalia.state import State
@@ -243,3 +244,33 @@ def test_post_article_escalates_instead_of_publishing(tmp_path):
     assert note_id is None
     assert agent.pub.posts == []                          # author never posted
     assert edpub.posts and edpub.posts[0]["text"].startswith("⏸ PENDING")
+
+
+def test_reaction_lookup_failure_keeps_row_pending(tmp_path):
+    """A deleted staging note must not wedge or publish the row."""
+    db, agent, ed, board, edpub = _pending(tmp_path)
+    staging = edpub.posts[-1]["id"]
+    def _boom(note_id):
+        raise RuntimeError("note deleted")
+    edpub.reactions = _boom
+    assert ed.check_approvals(db, {"atlas": agent}) == 0
+    rows = db.pending_posts()
+    assert len(rows) == 1 and rows[0]["status"] == "pending"
+
+
+def test_publish_failure_releases_row(tmp_path):
+    """If the article vanished from the store, the row goes back to pending."""
+    db, agent, ed, board, edpub = _pending(tmp_path)
+    agent.lib.stores["geography"].articles = {}        # article vanished
+    staging = edpub.posts[-1]["id"]
+    edpub.reactions_by[staging] = [{"type": "👍", "user": {"id": "admin1"}}]
+    assert ed.check_approvals(db, {"atlas": agent}) == 0
+    rows = db.pending_posts()
+    assert len(rows) == 1 and rows[0]["status"] == "pending"
+    assert agent.pub.posts == []
+
+
+def test_concerns_stored_as_json(tmp_path):
+    db, agent, ed, board, edpub = _pending(tmp_path)
+    row = db.pending_posts()[0]
+    assert json.loads(row["concerns"]) == REJECT_B["concerns"]
