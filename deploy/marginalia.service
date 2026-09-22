@@ -1,7 +1,10 @@
 # Marginalia scheduler service (spec §9) — one process, all agents.
-# Install on lamai270:
-#   sudo cp deploy/marginalia.service /etc/systemd/system/
-#   sudo systemctl daemon-reload && sudo systemctl enable --now marginalia
+# User-level unit (runs as alx, no sudo; linger is enabled on lamai270).
+# Install:
+#   cp deploy/marginalia.service ~/.config/systemd/user/marginalia.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now marginalia
+# Logs: journalctl --user -u marginalia -f
 #
 # The monthly ZIM refresh is a cron job *inside* the scheduler (run.py),
 # so no separate systemd timer is needed.
@@ -13,7 +16,6 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=alx
 WorkingDirectory=/home/alx/code/marginalia
 # .env holds MK_TOKEN_* (chmod 600, never in git)
 EnvironmentFile=-/home/alx/code/marginalia/.env
@@ -22,4 +24,4 @@ Restart=on-failure
 RestartSec=30
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
