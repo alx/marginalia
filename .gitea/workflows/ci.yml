@@ -1,0 +1,53 @@
+# Gitea Actions: run the test suite, then deploy the live instance.
+#
+# Deploy path: the deploy job drops a trigger file into the live checkout
+# (/home/alx/code/marginalia on lamai270). A systemd user path unit on the
+# host (marginalia-deploy.path) reacts by running marginalia-deploy.service,
+# which does `git pull --ff-only origin main` + `systemctl --user restart
+# marginalia` + a health check, then consumes the trigger. The workflow
+# waits for consumption and fails if the host side left a .deploy-trigger.failed.
+name: CI & Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: [lamai270]
+    container:
+      image: python:3.13-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+      - name: Run test suite
+        run: python -m pytest tests/ -q
+
+  deploy:
+    needs: test
+    runs-on: [lamai270]
+    container:
+      image: debian:bookworm-slim
+      volumes:
+        - /home/alx/code/marginalia:/repo
+    steps:
+      - name: Trigger host deploy and wait for consumption
+        run: |
+          set -eu
+          echo "${{ github.sha }}" > /repo/.deploy-trigger
+          i=0
+          while [ -e /repo/.deploy-trigger ] && [ $i -lt 60 ]; do
+            sleep 2
+            i=$((i+1))
+          done
+          if [ -e /repo/.deploy-trigger ]; then
+            echo "::error::deploy trigger was not consumed within 120s"
+            exit 1
+          fi
+          if [ -e /repo/.deploy-trigger.failed ]; then
+            echo "::error::host deploy failed; trigger left as .deploy-trigger.failed:"
+            cat /repo/.deploy-trigger.failed
+            exit 1
+          fi
+          echo "deploy trigger consumed; host deploy succeeded"
