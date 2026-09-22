@@ -94,11 +94,14 @@ class FakeDB:
         return (agent, path) in self.seen_paths
 
     def save_post(self, agent, topic, path, note_id, build_note_id, image_file,
-                  zim_book, zim_date, title=None):
+                  zim_book, zim_date, title=None, text=None):
         self.seen_paths.add((agent, path))
         self.saved.append((agent, topic, path, note_id, build_note_id, image_file))
         self.posts_by_note[note_id] = {"agent": agent, "topic": topic, "path": path,
-                                       "title": title}
+                                       "title": title, "text": text}
+
+    def recent_posts(self, n=15):
+        return []
 
     def post_by_note(self, note_id):
         return self.posts_by_note.get(note_id)

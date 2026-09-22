@@ -26,6 +26,11 @@ misskey:
 # kiwix_serve:                   # optional, for offline "full article" links
 #   base_url: "http://127.0.0.1:8080"
 
+# Editorial gate (spec §7): the managing editor posts under its own account
+# (MK_TOKEN_EDITOR) and drafts escalate there for human sign-off; any emoji
+# reaction from the admin (MK_ADMIN_USER_ID) on a staging note approves it.
+# Both are env vars — never in this file.
+
 llm:
   base_url: "http://llm.internal:8081/v1"   # llama.cpp OpenAI-compatible, on the tailnet
   model: "qwen3.8"
@@ -36,6 +41,13 @@ defaults:
   max_post_chars: 1500  # draft budget; Misskey textLimitMain is 3000
   poll_seconds: 45
   replies_per_thread_per_hour: 3
+  approval_every_minutes: 5   # HITL approval poll (any admin emoji on a staging note)
+
+# Editorial workflow board (spec §7): one epic per draft, a task per editor
+# review round, a subtask per revision, a hitl-labelled task per escalation.
+# The board is audit/coordination only; state.sqlite drives publishing.
+beads:
+  repo: .                      # the beads repo at the service working directory
 
 agents:
   atlas:

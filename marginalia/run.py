@@ -30,6 +30,8 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from marginalia.agent import Agent, poll, post_article, tick
+from marginalia.board import Board
+from marginalia.editorial import Editorial
 from marginalia.llm import LLM
 from marginalia.publisher import Publisher
 from marginalia.skills import dates as sk_dates
@@ -45,12 +47,24 @@ MORNING_HOUR, MORNING_MINUTE = 8, 30   # Chronicle's "on this day" post
 
 # -- building the pieces ------------------------------------------------------
 def build(cfg_path: str = "agents.yaml"):
-    """Load config, state, library and the agents that have a token."""
+    """Load config, state, library, the editorial gate, and the tokened agents."""
     cfg = yaml.safe_load(Path(cfg_path).read_text())
     db = State(cfg.get("state", "state.sqlite"))
     lib = ZimLibrary(cfg["zim"]["dir"])
     llm = LLM(cfg["llm"]["base_url"], cfg["llm"]["model"],
               timeout=cfg["llm"].get("timeout", 120))
+    # Editorial gate (spec §7): active only when the editor token exists; the
+    # board is best-effort, so a missing bd binary degrades to log-only.
+    board = Board(cfg.get("beads", {}).get("repo", "."))
+    editorial = None
+    etoken = os.environ.get("MK_TOKEN_EDITOR", "")
+    if etoken:
+        editorial = Editorial(
+            board,
+            Publisher(cfg["misskey"]["host"], etoken, cfg["misskey"].get("ssl", False)),
+            os.environ.get("MK_ADMIN_USER_ID", ""))
+    else:
+        log.warning("MK_TOKEN_EDITOR unset: editorial gate disabled")
     agents: list[Agent] = []
     for name, a in cfg["agents"].items():
         token = os.environ.get(a.get("token_env", ""), "")
@@ -58,8 +72,8 @@ def build(cfg_path: str = "agents.yaml"):
             log.warning("skip %s: no token for %s", name, a.get("token_env"))
             continue
         pub = Publisher(cfg["misskey"]["host"], token, cfg["misskey"].get("ssl", False))
-        agents.append(Agent(name, cfg, db, lib, llm, pub))
-    return cfg, db, lib, agents
+        agents.append(Agent(name, cfg, db, lib, llm, pub, editorial=editorial))
+    return cfg, db, lib, agents, editorial
 
 
 # -- job bodies (each catches its own errors) ---------------------------------
@@ -120,10 +134,21 @@ def refresh_job(cfg_path: str) -> None:
         log.info("ZIM refresh done")
 
 
+def approval_job(editorial, db, agents_by_id) -> None:
+    """HITL pass: publish pending drafts the admin has reacted to (spec §7)."""
+    try:
+        if editorial and (n := editorial.check_approvals(db, agents_by_id)):
+            log.info("approvals: published %d", n)
+    except Exception:
+        log.exception("approval check failed")
+
+
 # -- scheduler -----------------------------------------------------------------
 def build_scheduler(cfg, agents, cfg_path: str = "agents.yaml",
-                    now: datetime | None = None, db=None, llm=None) -> BlockingScheduler:
-    """The full job table: posting, polling, date article, monthly refresh, ops."""
+                    now: datetime | None = None, db=None, llm=None,
+                    editorial=None) -> BlockingScheduler:
+    """The full job table: posting, polling, date article, approvals,
+    monthly refresh, ops."""
     now = now or datetime.now()
     sched = BlockingScheduler()
     poll_every = int(cfg.get("defaults", {}).get("poll_seconds", 45))
@@ -154,6 +179,16 @@ def build_scheduler(cfg, agents, cfg_path: str = "agents.yaml",
         args=[cfg_path], id="zim-refresh", name="monthly ZIM refresh",
         max_instances=1, coalesce=True, misfire_grace_time=24 * 3600)
 
+    # HITL approvals: any emoji from the admin on a staging note publishes
+    # the draft under the author account. Runs even when editorial is None
+    # (the job body is a no-op), so the job table stays stable in tests.
+    sched.add_job(
+        approval_job, IntervalTrigger(
+            minutes=int(cfg.get("defaults", {}).get("approval_every_minutes", 5))),
+        args=[editorial, db, {a.id: a for a in agents}],
+        id="approvals", name="HITL approvals",
+        max_instances=1, coalesce=True, misfire_grace_time=3600)
+
     # First ops check 15 min after boot (after the first posting round has
     # had a chance to complete), then every 6 h.
     sched.add_job(
@@ -168,13 +203,14 @@ def main(cfg_path: str = "agents.yaml") -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    cfg, db, lib, agents = build(cfg_path)
+    cfg, db, lib, agents, editorial = build(cfg_path)
     if not agents:
         log.error("no agents have tokens; nothing to do (set MK_TOKEN_* env vars)")
         return
     log.info("scheduling %d agents: %s", len(agents), ", ".join(a.id for a in agents))
     llm = agents[0].llm          # shared by every agent
-    build_scheduler(cfg, agents, cfg_path, db=db, llm=llm).start()    # blocks forever
+    build_scheduler(cfg, agents, cfg_path, db=db, llm=llm,
+                    editorial=editorial).start()                   # blocks forever
 
 
 if __name__ == "__main__":

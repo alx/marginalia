@@ -7,7 +7,13 @@ goes to ``llm.base_url`` (llama.cpp on the tailnet); the endpoint is probed with
 """
 from __future__ import annotations
 
+import json
+import logging
+import re
+
 import requests
+
+log = logging.getLogger("marginalia.llm")
 
 _INTENTS = {"question", "section_request", "correction", "other"}
 
@@ -127,3 +133,83 @@ class LLM:
         )
         user = f"Reader: {question}\n\nRelevant text:\n{grounded}\n\nReply:"
         return self.complete(system, user, temperature=0.6, max_tokens=260)
+
+    # -- editorial gate (spec §7) -------------------------------------------
+    def editor_review(self, persona: str, title: str, source: str, draft: str,
+                      recent: str, limit: int) -> dict:
+        """One editor pass over a guard-clean draft.
+
+        Returns ``parse_verdict`` output: ``{approved, concerns[], suggested_revision,
+        unparseable}``.
+        """
+        system = (
+            "You are the managing editor of Marginalia, a feed where specialist "
+            f"bot accounts (this one: {persona}) post Wikipedia margin-notes. "
+            "Review the draft strictly against the article text provided. Checks: "
+            "(1) fidelity — every fact, claim and number in the draft must appear in, "
+            "or follow directly from, the article text; flag anything added, rounded, "
+            "converted, exaggerated, or implied that the text does not support; "
+            "(2) freshness — the draft must not repeat or closely paraphrase any "
+            "recent post on the feed; (3) opening line — concrete and worth reading, "
+            "no hype; (4) tone — plain and even; metric units as given; never medical "
+            "advice; no self-referential bot talk. Approve only when the note is "
+            "accurate, safe and fresh; be strict about facts, generous about style. "
+            'Respond with JSON only: {"approved": true|false, "concerns": ["..."], '
+            '"suggested_revision": ""} — one item per problem in `concerns`; put a '
+            "corrected passage or a short fix instruction in `suggested_revision` "
+            '(empty string when approved).'
+        )
+        user = (f"Article title: {title}\n\nArticle text:\n{source}\n\n"
+                f"Draft (limit {limit} chars):\n{draft}\n\n"
+                f"Recent posts on the feed:\n{recent or '(none)'}\n\nReview the draft.")
+        raw = self.complete(system, user, temperature=0.1, max_tokens=800)
+        return parse_verdict(raw)
+
+    def revise(self, persona: str, title: str, source: str, draft: str,
+               concerns: list[str], limit: int) -> str:
+        """Rewrite a rejected draft, addressing every editor concern."""
+        system = (
+            f"You are {persona}. Your managing editor rejected your draft. Rewrite "
+            f"the post of at most {limit} characters addressing every concern. Use "
+            "ONLY the provided article text; copy every number exactly as it appears "
+            "— never round, convert or compute. No hashtags, no leading or trailing "
+            "whitespace."
+        )
+        user = (f"Article title: {title}\n\nArticle text:\n{source}\n\n"
+                f"Your draft:\n{draft}\n\nEditor concerns:\n"
+                + "\n".join(f"- {c}" for c in concerns) + "\n\nRewrite the post.")
+        return self.complete(system, user, temperature=0.7,
+                             max_tokens=limit // 3 + 150)
+
+
+def parse_verdict(raw: str) -> dict:
+    """Pull the editor's verdict JSON out of model output.
+
+    Tolerant of code fences and surrounding prose. Fails OPEN: an unparseable
+    verdict approves the draft (the guards remain the hard floor) and flags
+    ``unparseable`` so the caller can log it.
+    """
+    s = (raw or "").strip()
+    m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", s, re.S)
+    if m:
+        s = m.group(1)
+    else:
+        a, b = s.find("{"), s.rfind("}")
+        if a != -1 and b > a:
+            s = s[a:b + 1]
+    try:
+        v = json.loads(s)
+    except json.JSONDecodeError:
+        log.warning("editor verdict unparseable (failing open): %.200s", raw)
+        return {"approved": True, "concerns": [], "suggested_revision": "",
+                "unparseable": True}
+    concerns = v.get("concerns") or []
+    if isinstance(concerns, (str, int, float)):
+        concerns = [concerns]
+    concerns = [str(c).strip() for c in concerns if str(c).strip()]
+    return {
+        "approved": bool(v.get("approved", False)),
+        "concerns": concerns,
+        "suggested_revision": str(v.get("suggested_revision") or ""),
+        "unparseable": False,
+    }

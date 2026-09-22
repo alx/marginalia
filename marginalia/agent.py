@@ -6,11 +6,14 @@ the agent's own reply. ``poll()`` is the reply side (issue marginalia-poll).
 """
 from __future__ import annotations
 
+import logging
 import posixpath
 import random
 import re
 
 from marginalia import extract, guards, images, skills
+
+log = logging.getLogger("marginalia.agent")
 from marginalia.skills import coordinates as sk_coordinates
 from marginalia.skills import dates as sk_dates
 from marginalia.skills import infobox as sk_infobox
@@ -44,7 +47,7 @@ PERSONAS = {
 class Agent:
     """One bot: its agents.yaml block plus the shared services it posts with."""
 
-    def __init__(self, name, cfg, db, lib, llm, pub):
+    def __init__(self, name, cfg, db, lib, llm, pub, editorial=None):
         a = cfg["agents"][name]
         self.id = name
         self.topics = a["topics"]
@@ -60,6 +63,7 @@ class Agent:
         self.lib = lib
         self.llm = llm
         self.pub = pub
+        self.editorial = editorial
 
     def cw_for(self, soup):
         """Content warning for this article, or None (Palette: spoilers)."""
@@ -178,22 +182,21 @@ def tick(agent) -> str | None:
 
 
 def post_article(agent, topic: str, path: str) -> str | None:
-    """Draft, guard, picture and publish one specific article.
+    """Draft, guard, editor-gate, picture and publish one specific article.
 
     The build note (spec §5) is folded into the post as a trailing
     conversation hook instead of a self-reply. Returns the note id, or None
-    if nothing was posted (guards failed, no article, ...). ``tick`` is
-    pick_candidate + this; the scheduler's morning date-article job calls it
-    directly with today's date article.
+    if nothing was posted (guards failed, escalated to human review, ...).
+    ``tick`` is pick_candidate + this; the scheduler's morning date-article
+    job calls it directly with today's date article.
     """
-    db, lib, llm, pub, cfg = agent.db, agent.lib, agent.llm, agent.pub, agent.cfg
+    lib, llm, cfg = agent.lib, agent.llm, agent.cfg
 
     store = lib.stores.get(topic)
     if not store or not (got := store.html(path)):
         return None
     _, html = got
     soup = extract.parse(html)
-    heads = extract.headings(soup)
     title = path_title(path)
 
     source, extra = _draft_context(agent, soup)
@@ -210,7 +213,44 @@ def post_article(agent, topic: str, path: str) -> str | None:
             draft = d
             break
     if draft is None:
+        # all three drafts failed; log which guards bit and skip the article
+        bad = guards.report(d, grounding, agent, limit)  # noqa: F821 - last attempt
+        log.info("post %s: all 3 drafts failed guards (%s) for '%s'; skipping",
+                 agent.id, ",".join(bad) or "?", title)
         return None
+
+    # editorial gate (spec §7): editor reviews, up to one revision, else the
+    # draft is escalated to the human-in-the-loop queue and not published now
+    epic = None
+    if agent.editorial is not None:
+        res = agent.editorial.gate(agent, topic, path, title, source, draft, limit)
+        if res["outcome"] == "pending":
+            return None
+        draft, epic = res["draft"], res["epic"]
+
+    note_id = finalize(agent, topic, path, draft)
+    if epic:
+        agent.editorial.board.close(
+            epic, note=f"published as {note_id}" if note_id else "publish failed")
+    return note_id
+
+
+def finalize(agent, topic: str, path: str, draft: str) -> str | None:
+    """Assemble the final text (image, hook, links, skill lines) and publish.
+
+    Shared by the normal posting flow and the HITL approval path, so a note
+    approved by a human comes out in exactly the same shape as any other.
+    Returns the note id, or None if the article vanished from the store.
+    """
+    db, lib, llm, pub, cfg = agent.db, agent.lib, agent.llm, agent.pub, agent.cfg
+
+    store = lib.stores.get(topic)
+    if not store or not (got := store.html(path)):
+        return None
+    _, html = got
+    soup = extract.parse(html)
+    heads = extract.headings(soup)
+    title = path_title(path)
 
     pic = None
     if cfg["images"]["mode"] != "none":
@@ -239,7 +279,7 @@ def post_article(agent, topic: str, path: str) -> str | None:
     note_id = pub.post(text, cw=cw, file_ids=file_ids)
 
     db.save_post(agent.id, topic, path, note_id, None,
-                 pic and pic["name"], store.book, store.date, title=title)
+                 pic and pic["name"], store.book, store.date, title=title, text=text)
     return note_id
 
 

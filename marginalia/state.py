@@ -10,6 +10,7 @@ which already exposes ``execute``/``commit``.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -17,12 +18,21 @@ import time
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS posts (
   agent TEXT, topic TEXT, path TEXT, title TEXT, zim_book TEXT, zim_date TEXT,
-  note_id TEXT PRIMARY KEY, build_note_id TEXT, image_file TEXT, posted_at TEXT
+  note_id TEXT PRIMARY KEY, build_note_id TEXT, image_file TEXT, posted_at TEXT,
+  text TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS posts_once ON posts(agent, path);
 CREATE TABLE IF NOT EXISTS cursors (agent TEXT, key TEXT, value TEXT, PRIMARY KEY (agent, key));
 CREATE TABLE IF NOT EXISTS replies (incoming_note_id TEXT PRIMARY KEY, reply_note_id TEXT, agent TEXT);
 CREATE TABLE IF NOT EXISTS image_licences (file TEXT PRIMARY KEY, ok INTEGER, credit TEXT);
+CREATE TABLE IF NOT EXISTS pending_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  epic TEXT, hitl TEXT, staging_note TEXT,
+  agent TEXT, topic TEXT, path TEXT, title TEXT,
+  draft TEXT, concerns TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT, published_note TEXT
+);
 """
 
 
@@ -67,20 +77,33 @@ class State:
         self.conn = _LockedConn(raw)
         self.conn.executescript(_SCHEMA)
         self.conn.commit()
+        # one-off migration: CREATE TABLE IF NOT EXISTS never alters an old table
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(posts)")}
+        if "text" not in cols:
+            self.conn.execute("ALTER TABLE posts ADD COLUMN text TEXT")
+            self.conn.commit()
 
     # -- posts -------------------------------------------------------------
     def save_post(self, agent, topic, path, note_id, build_note_id,
-                  image_file, zim_book, zim_date, title=None) -> None:
+                  image_file, zim_book, zim_date, title=None, text=None) -> None:
         """Record a published note and the article/build it came from."""
         self.conn.execute(
             """INSERT OR REPLACE INTO posts
                (agent, topic, path, title, zim_book, zim_date,
-                note_id, build_note_id, image_file, posted_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                note_id, build_note_id, image_file, posted_at, text)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (agent, topic, path, title, zim_book, zim_date,
-             note_id, build_note_id, image_file, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+             note_id, build_note_id, image_file,
+             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), text),
         )
         self.conn.commit()
+
+    def recent_posts(self, n: int = 15) -> list[dict]:
+        """The n most recent posts (any agent), newest first."""
+        rows = self.conn.execute(
+            """SELECT agent, title, text, posted_at FROM posts
+               ORDER BY posted_at DESC, note_id DESC LIMIT ?""", (n,)).fetchall()
+        return [dict(r) for r in rows]
 
     def post_by_note(self, note_id):
         """The post row for a Misskey note id, or None."""
@@ -139,6 +162,48 @@ class State:
             "INSERT OR REPLACE INTO image_licences VALUES (?,?,?)",
             (file_title, int(ok), credit),
         )
+        self.conn.commit()
+
+    # -- pending (human-in-the-loop) posts ---------------------------------
+    def save_pending(self, epic, hitl, staging_note, agent, topic, path, title,
+                     draft, concerns) -> int:
+        """Record an escalated draft; returns the row id."""
+        cur = self.conn.execute(
+            """INSERT INTO pending_posts
+               (epic, hitl, staging_note, agent, topic, path, title, draft,
+                concerns, status, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,'pending',?)""",
+            (epic, hitl, staging_note, agent, topic, path, title, draft,
+             json.dumps(concerns),
+             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def pending_posts(self) -> list[dict]:
+        """All rows still awaiting a human decision."""
+        rows = self.conn.execute(
+            "SELECT * FROM pending_posts WHERE status='pending' ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    def claim_pending(self, pid: int) -> bool:
+        """Atomically flip a row pending -> approving; True if we got it."""
+        cur = self.conn.execute(
+            "UPDATE pending_posts SET status='approving' "
+            "WHERE id=? AND status='pending'", (pid,))
+        self.conn.commit()
+        return cur.rowcount == 1
+
+    def release_pending(self, pid: int) -> None:
+        """Back off to pending (publish failed; retry next pass)."""
+        self.conn.execute(
+            "UPDATE pending_posts SET status='pending' WHERE id=?", (pid,))
+        self.conn.commit()
+
+    def resolve_pending(self, pid: int, note_id: str) -> None:
+        """Mark published; the staging note id is kept for the audit trail."""
+        self.conn.execute(
+            "UPDATE pending_posts SET status='published', published_note=? WHERE id=?",
+            (note_id, pid))
         self.conn.commit()
 
     def close(self) -> None:

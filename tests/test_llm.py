@@ -6,7 +6,7 @@ import os
 import pytest
 import requests
 
-from marginalia.llm import LLM, extract_class
+from marginalia.llm import LLM, extract_class, parse_verdict
 
 ENDPOINT = "http://llm.internal:8081/v1"
 MODEL = "qwen3.8"
@@ -27,6 +27,34 @@ def test_extract_class_embedded():
 def test_extract_class_defaults_to_other():
     assert extract_class("I don't know") == "other"
     assert extract_class("") == "other"
+
+
+# -- editorial verdict parsing ---------------------------------------------
+def test_parse_verdict_clean_json():
+    v = parse_verdict('{"approved": false, "concerns": ["a number"], "suggested_revision": "fix"}')
+    assert v == {"approved": False, "concerns": ["a number"],
+                "suggested_revision": "fix", "unparseable": False}
+
+
+def test_parse_verdict_fenced_and_embedded():
+    v = parse_verdict('Sure! Here is the review:\n```json\n{"approved": true, "concerns": []}\n```\nDone.')
+    assert v["approved"] is True and v["unparseable"] is False
+
+
+def test_parse_verdict_concerns_string_becomes_list():
+    v = parse_verdict('{"approved": false, "concerns": "too long"}')
+    assert v["concerns"] == ["too long"]
+
+
+def test_parse_verdict_missing_approval_defaults_to_reject():
+    v = parse_verdict('{"concerns": ["x"]}')
+    assert v["approved"] is False
+
+
+def test_parse_verdict_garbage_fails_open():
+    v = parse_verdict("I cannot review this note at all.")
+    assert v["approved"] is True and v["unparseable"] is True
+    assert v["concerns"] == []
 
 
 def _live():

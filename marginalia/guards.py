@@ -25,22 +25,33 @@ def _nums(s: str) -> set[str]:
 DOSE = re.compile(r"\b\d+(?:\.\d+)?\s?(?:mg|mcg|µg|g|ml|mL|IU)\b")
 
 
-def ok(draft: str, source: str, agent, limit: int = 320) -> bool:
-    """True iff the draft is usable.
+def report(draft: str, source: str, agent, limit: int = 320) -> list[str]:
+    """Names of the guard checks ``draft`` fails; empty when usable.
 
-    * within ``limit`` characters;
-    * every number in the draft already appears in ``source`` (no invented stats);
-    * no dosing figures for ``mycelia`` or any agent carrying the safety skill;
-    * no advice phrasing, no rounded uncertain dates (safety / dates skills).
+    * ``length`` — within ``limit`` characters;
+    * ``numbers`` — every number in the draft already appears in ``source``
+      (no invented stats);
+    * ``dose`` — no dosing figures for ``mycelia`` or any agent carrying the
+      safety skill;
+    * ``advice`` — no advice phrasing (safety skill);
+    * ``dates`` — no rounded uncertain dates (dates skill).
     """
-    if len(draft) > limit or not _nums(draft) <= _nums(source):
-        return False
+    bad: list[str] = []
+    if len(draft) > limit:
+        bad.append("length")
+    if not _nums(draft) <= _nums(source):
+        bad.append("numbers")
     sk = getattr(agent, "skills", None) or []
     if getattr(agent, "id", None) == "mycelia" or "safety" in sk:
         if DOSE.search(draft):
-            return False
+            bad.append("dose")
     if "safety" in sk and _safety.ADVICE.search(draft):
-        return False
+        bad.append("advice")
     if "dates" in sk and _dates.rounding_violation(draft, source):
-        return False
-    return True
+        bad.append("dates")
+    return bad
+
+
+def ok(draft: str, source: str, agent, limit: int = 320) -> bool:
+    """True iff the draft is usable (see ``report``)."""
+    return not report(draft, source, agent, limit)

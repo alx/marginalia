@@ -18,7 +18,8 @@ def test_one_post_and_poll_job_per_agent():
     sched = build_scheduler(CFG, _agents(), now=datetime(2026, 9, 21, 12, 0, 0))
     ids = {j.id for j in sched.get_jobs()}
     assert ids == {"post-atlas", "poll-atlas", "post-chronicle",
-                   "poll-chronicle", "date-chronicle", "zim-refresh", "ops"}
+                   "poll-chronicle", "date-chronicle", "zim-refresh", "ops",
+                   "approvals"}
 
 
 def test_post_interval_follows_posts_per_day():

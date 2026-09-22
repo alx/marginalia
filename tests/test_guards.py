@@ -44,3 +44,16 @@ def test_ok_agent_without_id_is_safe():
     class A:
         pass
     assert ok("Fine text.", "Fine text source.", A())
+
+
+def test_report_names_the_failed_checks():
+    from marginalia.guards import report
+    plain = SimpleNamespace(id="atlas")
+    assert report("Covering 9.2 million km².", "It covers 9.2 million km².", plain) == []
+    assert report("It is 999 km wide.", "It is 9.2 km wide.", plain) == ["numbers"]
+    assert report("x" * 321, "source", plain) == ["length"]
+    # multiple failures keep their check order: length, numbers, dose, ...
+    assert report("x" * 400 + " and 999 km", "source",
+                  SimpleNamespace(id="mycelia")) == ["length", "numbers"]
+    assert report("Take 500 mg daily.", "A dose of 500 mg.",
+                  SimpleNamespace(id="mycelia")) == ["dose"]

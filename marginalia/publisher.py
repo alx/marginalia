@@ -82,6 +82,14 @@ class Publisher:
         """Fetch a note by id."""
         return self.mk.notes_show(note_id)
 
+    def reactions(self, note_id: str) -> list[dict]:
+        """Reactions on a note.
+
+        One row per reacting user: {"id", "createdAt", "user": {UserLite},
+        "type": "<emoji>"}.
+        """
+        return self.mk.notes_reactions(note_id, limit=100)
+
     def delete(self, note_id: str) -> None:
         """Delete a note (used to clean up pilot posts)."""
         self.mk.notes_delete(note_id)
