@@ -49,6 +49,18 @@ class Board:
             return None
         return r.stdout.strip()
 
+    def _run_raw(self, args: list[str]):
+        """Run bd, returning (rc, stdout, stderr) for callers that must inspect the failure."""
+        if not self.available():
+            return 127, "", "bd binary not available"
+        try:
+            with self._lock:
+                r = subprocess.run([self.bd, "-C", self.repo, *args],
+                                   capture_output=True, text=True, timeout=60)
+        except (subprocess.SubprocessError, OSError) as e:
+            return 1, "", str(e)
+        return r.returncode, r.stdout, r.stderr
+
     def _create(self, title, *, type_="task", parent=None, labels=(),
                 meta=None, assign=None):
         args = ["create", title]
@@ -85,12 +97,28 @@ class Board:
             self._run(["update", issue, "--append-notes", text[:1000]])
 
     def close(self, issue, note=None):
-        """Close an issue, appending a final note when given."""
+        """Close an issue, appending a final note when given.
+
+        bd 1.3+ refuses a close by an actor other than the assignee; the
+        scheduler acts on the bots' behalf, so that specific error is
+        retried with ``--force``. An "open child" refusal is NEVER forced —
+        the epic/task/subtask hierarchy must stay bottom-up.
+        """
         if not issue:
             return
         if note:
             self._run(["update", issue, "--append-notes", note[:1000]])
-        self._run(["close", issue])
+        rc, out, err = self._run_raw(["close", issue])
+        if rc == 0:
+            return
+        text = (err or out).strip()
+        if "assignee" in text:
+            rc2, out2, err2 = self._run_raw(["close", issue, "--force"])
+            if rc2 != 0:
+                log.warning("board: bd close %s --force failed (%d): %s",
+                            issue, rc2, (err2 or out2).strip()[:300])
+        else:
+            log.warning("board: bd close %s failed (%d): %s", issue, rc, text[:300])
 
     def open_hitls(self) -> list[dict]:
         """The open human-in-the-loop queue, as a list of issue dicts."""

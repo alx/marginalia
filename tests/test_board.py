@@ -4,6 +4,7 @@
 by the whole module. The no-op path (missing binary) is tested separately
 without touching a repo.
 """
+import json
 import shutil
 import subprocess
 
@@ -61,6 +62,21 @@ def test_cannot_close_epic_with_open_children(repo):
         if i["parent"] == epic:
             b.close(i["id"])
     assert b._run(["close", epic]) is not None
+
+
+def test_close_never_forces_past_open_children(repo):
+    """The assignee force-retry must not bypass the bottom-up rule."""
+    b = Board(str(repo))
+    epic = b.open_epic("Draft: Mars — atlas", assign="atlas")
+    b.open_task(epic, "Human approval: Mars — atlas", labels=("hitl",))
+    b.close(epic)                          # must refuse, must NOT --force
+    out = b._run(["list", "--flat", "--no-pager", "--json"])
+    issues = {i["id"]: i for i in json.loads(out)}
+    assert issues[epic]["status"] == "open"
+    for i in b.open_hitls():              # tidy up
+        if i["parent"] == epic:
+            b.close(i["id"])
+    b.close(epic)
 
 
 def test_missing_binary_is_a_silent_noop(tmp_path):
