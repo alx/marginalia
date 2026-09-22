@@ -345,7 +345,7 @@ CFG_SKILLS = {
         "atlas": {
             "topics": ["geography"], "hashtags": "#geography",
             "seeds": ["List of things"],
-            "skills": ["units", "coordinates", "infobox"],
+            "skills": ["coordinates", "infobox"],
             "posts_per_day": 1,
         },
         "mycelia": {
@@ -367,7 +367,7 @@ def _article_with_box(lead, heads, box_rows):
     return h + '</div></body></html>'
 
 
-def test_post_article_applies_units_and_coordinates_and_infobox():
+def test_post_article_applies_coordinates_and_infobox():
     store = FakeStore()
     store.articles = {"Alpha": _article_with_box(
         LEAD, ["One", "Two"],
@@ -380,7 +380,7 @@ def test_post_article_applies_units_and_coordinates_and_infobox():
     agent = Agent("atlas", CFG_SKILLS, db, lib, llm, pub)
     assert post_article(agent, "geography", "Alpha") is not None
     text = pub.posts[0][0]
-    assert "9.2 million square kilometres (≈ 3,552,138 square miles)" in text
+    assert "(≈" not in text                    # no imperial conversions anymore
     assert "Coordinates: 23.4, 55.6" in text
     # infobox skill: the infobox card was offered to the model as source
     assert "Area: 9.2 million square kilometres" in llm.last_source

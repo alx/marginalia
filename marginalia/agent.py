@@ -17,7 +17,6 @@ from marginalia.skills import infobox as sk_infobox
 from marginalia.skills import living_person as sk_living_person
 from marginalia.skills import safety as sk_safety
 from marginalia.skills import spoilers as sk_spoilers
-from marginalia.skills import units as sk_units
 
 
 # Boilerplate trailing sections we never offer as a build-note follow-up.
@@ -230,10 +229,8 @@ def post_article(agent, topic: str, path: str) -> str | None:
         text += f"\n\nImage: {pic['credit']}"
     text += "\nText from Wikipedia, CC BY-SA 4.0"
 
-    # code-side skill augmentations, applied after the guards: converted units
-    # and the coordinate line are facts the model is not allowed to invent
-    if skills.has(agent.skills, "units"):
-        text = sk_units.augment(text)
+    # code-side skill augmentations, applied after the guards: the coordinate
+    # line is a fact the model is not allowed to invent
     if skills.has(agent.skills, "coordinates") and (line := sk_coordinates.from_infobox(extract.infobox(soup))):
         text += f"\n{line}"
 

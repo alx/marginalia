@@ -44,14 +44,14 @@ agents:
     hashtags: "#geography #climate"
     seeds: ["Outline of geography", "Physical geography", "List of deserts by area", "List of islands by area",
             "List of lakes by area", "Köppen climate classification", "Climate change", "Effects of climate change"]
-    skills: [infobox, units, coordinates, images]
+    skills: [infobox, coordinates, images]
     posts_per_day: 3
   quark:
     token_env: MK_TOKEN_QUARK
     topics: [physics, astronomy]
     hashtags: "#physics #astronomy"
     seeds: ["Outline of physics", "Outline of astronomy", "List of unsolved problems in physics", "Solar System"]
-    skills: [infobox, units, tex, scripts, images]
+    skills: [infobox, tex, scripts, images]
     posts_per_day: 3
   chronicle:
     token_env: MK_TOKEN_CHRONICLE

@@ -7,41 +7,7 @@ from bs4 import BeautifulSoup
 from marginalia import guards
 from marginalia.agent import Agent
 from marginalia.skills import (ALL, coordinates, dates, has, infobox,
-                               living_person, safety, spoilers, units)
-
-
-# -- units --------------------------------------------------------------------
-def test_units_km():
-    assert units.augment("9,200 km of coastline") == \
-        "9,200 km (≈ 5,717 mi) of coastline"
-
-
-def test_units_km_squared_and_millions():
-    out = units.augment("It covers 9.2 million km².")
-    assert out == "It covers 9.2 million km² (≈ 3,552,138 mi²)."
-
-
-def test_units_celsius_and_kg():
-    assert units.augment("It is 0 °C outside") == "It is 0 °C (32.0 °F) outside"
-    assert units.augment("It weighs 1 kg") == "It weighs 1 kg (≈ 2.20 lb)"
-
-
-def test_units_space_separated_thousands():
-    # ZIM/French-style "152 097 597" is ONE number; the whole value must be
-    # converted, not just the final "597" group (regression: 597 km -> 371 mi)
-    out = units.augment("aphelion of 152 097 597 km")
-    assert out == "aphelion of 152 097 597 km (≈ 94,509,036 mi)"
-    # decimals with space groups still resolve (29.7827 km/s orbital speed)
-    assert units.augment("speed of 29.7827 km/s") == \
-        "speed of 29.7827 km (≈ 18.5 mi)/s"
-    # kg path shares the number core
-    assert units.augment("mass 3 000 kg") == "mass 3 000 kg (≈ 6,614 lb)"
-
-
-def test_units_no_match_and_idempotent():
-    assert units.augment("Nothing to see here.") == "Nothing to see here."
-    once = units.augment("It is 10 km long")
-    assert units.augment(once) == once
+                               living_person, safety, spoilers)
 
 
 # -- coordinates ----------------------------------------------------------------
@@ -157,11 +123,11 @@ def test_infobox_card():
 
 # -- registry ----------------------------------------------------------------------
 def test_registry_matches_yaml_names():
-    assert set(ALL) == {"units", "coordinates", "dates", "safety", "spoilers",
+    assert set(ALL) == {"coordinates", "dates", "safety", "spoilers",
                         "living_person", "infobox"}
-    assert has(["infobox", "units"], "units")
-    assert not has(None, "units")
-    assert not has([], "units")
+    assert has(["infobox", "coordinates"], "coordinates")
+    assert not has(None, "coordinates")
+    assert not has([], "coordinates")
 
 
 # -- guards skill integration --------------------------------------------------------

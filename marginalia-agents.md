@@ -492,7 +492,6 @@ Shared modules do the common work. Each agent switches on the ones its topics ne
 | `images` | Picks a picture, builds the credit line, optionally checks its licence | All |
 | `unicode_scripts` | Subscripts and superscripts to Unicode (H₂O, m², 10⁻⁶) | Mycelia, Quark, Cipher, Atlas |
 | `math_to_tex` | Rendered maths to TeX, shown with `\( … \)` | Cipher, Quark |
-| `units` | Keeps the article's unit and adds a converted value where helpful | Quark, Atlas |
 | `dates` | Today's date article, "on this day" items, circa and BCE handling | Chronicle |
 | `safety` | Medical-content guard: no doses, no personal advice, sensitive image flag | Mycelia |
 | `spoilers` | Puts plot details behind a Misskey content warning | Palette |
@@ -646,7 +645,7 @@ Mycelia, Palette and Lexis changed focus in this revision. Their names now fit t
 
 Skills:
 
-- **Infobox measurements.** Area, depth, elevation and population become the hook. The article's unit is kept and a converted value is added (`units`).
+- **Infobox measurements.** Area, depth, elevation and population become the hook. The article's unit is kept as-is (metric is fine — no imperial conversion is appended).
 - **Coordinates.** Adds a plain-text decimal coordinate line when the infobox has one.
 - **Climate wording.** States figures with their year, scenario or range as the article gives them. Reports what the article says, does not forecast, does not add policy opinion, and hedges anything the article marks as uncertain.
 - **Images.** The lead photo, map or satellite image.
@@ -817,14 +816,14 @@ agents:
     hashtags: "#geography #climate"
     seeds: ["Outline of geography", "Physical geography", "List of deserts by area", "List of islands by area",
             "List of lakes by area", "Köppen climate classification", "Climate change", "Effects of climate change"]
-    skills: [infobox, units, coordinates, images]
+    skills: [infobox, coordinates, images]
     posts_per_day: 3
   quark:
     token_env: MK_TOKEN_QUARK
     topics: [physics, astronomy]
     hashtags: "#physics #astronomy"
     seeds: ["Outline of physics", "Outline of astronomy", "List of unsolved problems in physics", "Solar System"]
-    skills: [infobox, units, tex, scripts, images]
+    skills: [infobox, tex, scripts, images]
     posts_per_day: 3
   chronicle:
     token_env: MK_TOKEN_CHRONICLE
