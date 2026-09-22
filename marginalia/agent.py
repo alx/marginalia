@@ -223,11 +223,11 @@ def post_article(agent, topic: str, path: str) -> str | None:
     unused = [h for h in heads if h.lower() not in USED_HEADINGS]
     hook = ""
     if unused:
-        hook = "\n" + llm.write_build_note(agent.persona, title=title, left_out=unused[:4])
+        hook = "\n\n" + llm.write_build_note(agent.persona, title=title, left_out=unused[:4])
 
     text = f"{draft}{hook}\n\n[Full article]({wiki_url(topic, path)})  {agent.hashtags}"
     if pic:
-        text += f"\nImage: {pic['credit']}"
+        text += f"\n\nImage: {pic['credit']}"
     text += "\nText from Wikipedia, CC BY-SA 4.0"
 
     # code-side skill augmentations, applied after the guards: converted units

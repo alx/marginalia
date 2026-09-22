@@ -265,6 +265,34 @@ def test_tick_posts_note_with_inline_hook():
     assert saved[3] == note_id and saved[4] is None    # no separate build note
 
 
+def test_post_layout_blank_lines():
+    # draft / hook / [Full article] / Image each start their own paragraph;
+    # the CC credit stays on the line directly under the image credit
+    store = FakeStore()
+    store.articles = {
+        "Alpha": (
+            '<html><body><div id="content">'
+            f'<section data-mw-section-id="0"><p>{LEAD}</p>'
+            '<table class="infobox">'
+            '<img src="_assets_/ab/Poster.jpg" width="300"></table></section>'
+            '<section data-mw-section-id="1"><h2>One</h2><p>body of One</p></section>'
+            '<section data-mw-section-id="2"><h2>Two</h2><p>body of Two</p></section>'
+            '</div></body></html>'
+        ),
+    }
+    store.blobs = {"_assets_/ab/Poster.jpg": (b"x", "image/jpeg")}
+    db, pub = FakeDB(), FakePub()
+    cfg = dict(CFG)
+    cfg["images"] = {"mode": "trust_local"}
+    agent = Agent("atlas", cfg, db, FakeLib({"geography": store}), FakeLLM(), pub)
+    assert post_article(agent, "geography", "Alpha") is not None
+    text = pub.posts[0][0]
+    assert "\n\nLeft out One, Two." in text              # blank line before hook
+    assert "#geography\n\nImage: Poster.jpg" in text     # blank line before image
+    assert text.endswith('Poster.jpg, from the Wikipedia article "Alpha"\n'
+                         "Text from Wikipedia, CC BY-SA 4.0")   # credit glued under image
+
+
 def test_tick_passes_config_limit_to_llm():
     store, db, pub = _store_one_article(), FakeDB(), FakePub()
     llm = FakeLLM()
