@@ -49,7 +49,8 @@ def build(cfg_path: str = "agents.yaml"):
     cfg = yaml.safe_load(Path(cfg_path).read_text())
     db = State(cfg.get("state", "state.sqlite"))
     lib = ZimLibrary(cfg["zim"]["dir"])
-    llm = LLM(cfg["llm"]["base_url"], cfg["llm"]["model"])
+    llm = LLM(cfg["llm"]["base_url"], cfg["llm"]["model"],
+              timeout=cfg["llm"].get("timeout", 120))
     agents: list[Agent] = []
     for name, a in cfg["agents"].items():
         token = os.environ.get(a.get("token_env", ""), "")

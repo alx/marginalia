@@ -29,6 +29,8 @@ misskey:
 llm:
   base_url: "http://llm.internal:8081/v1"   # llama.cpp OpenAI-compatible, on the tailnet
   model: "qwen3.8"
+  # long-form generations can exceed 2 minutes on the single-slot llama.cpp
+  timeout: 300
 
 defaults:
   max_post_chars: 1500  # draft budget; Misskey textLimitMain is 3000
