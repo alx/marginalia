@@ -26,6 +26,18 @@ def test_units_celsius_and_kg():
     assert units.augment("It weighs 1 kg") == "It weighs 1 kg (≈ 2.20 lb)"
 
 
+def test_units_space_separated_thousands():
+    # ZIM/French-style "152 097 597" is ONE number; the whole value must be
+    # converted, not just the final "597" group (regression: 597 km -> 371 mi)
+    out = units.augment("aphelion of 152 097 597 km")
+    assert out == "aphelion of 152 097 597 km (≈ 94,509,036 mi)"
+    # decimals with space groups still resolve (29.7827 km/s orbital speed)
+    assert units.augment("speed of 29.7827 km/s") == \
+        "speed of 29.7827 km (≈ 18.5 mi)/s"
+    # kg path shares the number core
+    assert units.augment("mass 3 000 kg") == "mass 3 000 kg (≈ 6,614 lb)"
+
+
 def test_units_no_match_and_idempotent():
     assert units.augment("Nothing to see here.") == "Nothing to see here."
     once = units.augment("It is 10 km long")

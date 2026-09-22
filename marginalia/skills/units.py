@@ -11,12 +11,17 @@ from __future__ import annotations
 import re
 
 # number, optional "million/billion/trillion" suffix
-_NUM = r"(\d[\d,]*(?:\.\d+)?)(\s*(?:million|billion|trillion))?"
+# the core matches plain and comma-grouped digits, and also space-grouped
+# thousands ("152 097 597", ZIM/French style) — without that, "152 097 597 km"
+# matched only the final "597" and got converted as 597 km.
+_NUM_CORE = r"\d[\d,]*(?:\.\d+)?(?:[ \u00A0]\d{3})*(?:\.\d+)?"
+_NUM = rf"({_NUM_CORE})(\s*(?:million|billion|trillion))?"
 _MULT = {"": 1.0, "million": 1e6, "billion": 1e9, "trillion": 1e12}
 
 
 def _value(num: str, suffix: str | None) -> float:
-    return float(num.replace(",", "")) * _MULT.get((suffix or "").strip().lower(), 1.0)
+    n = num.replace(",", "").replace(" ", "").replace("\u00A0", "")
+    return float(n) * _MULT.get((suffix or "").strip().lower(), 1.0)
 
 
 def _fmt(x: float) -> str:
@@ -53,10 +58,10 @@ def convert_mass(text: str) -> str:
 
 
 def convert_celsius(text: str) -> str:
-    pat = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*°?C\b")
+    pat = re.compile(rf"({_NUM_CORE})\s*°?C\b")
 
     def _sub(m: re.Match):
-        f = float(m.group(1).replace(",", "")) * 9 / 5 + 32
+        f = _value(m.group(1), None) * 9 / 5 + 32
         return f"{m.group(0)} ({_fmt(f)} °F)"
     return pat.sub(_sub, text)
 
