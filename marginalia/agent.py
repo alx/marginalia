@@ -201,11 +201,13 @@ def post_article(agent, topic: str, path: str) -> str | None:
     limit = cfg["defaults"]["max_post_chars"]
     # up to three draft attempts: a longer draft carries more numbers, so the
     # grounding guard rejects more often; each retry is cheap (one LLM call)
+    # The model is shown the title too, so its numbers are grounded as well.
+    grounding = f"{title}\n{source}"
     draft = None
     for _ in range(3):
         d = llm.write_post(agent.persona, agent.skills, title=title, source=source,
                            extra=extra, limit=limit)
-        if guards.ok(d, source, agent, limit):           # grounding / length / safety
+        if guards.ok(d, grounding, agent, limit):        # grounding / length / safety
             draft = d
             break
     if draft is None:

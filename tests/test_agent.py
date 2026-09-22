@@ -273,6 +273,21 @@ def test_tick_passes_config_limit_to_llm():
     assert llm.last_limit == 1500          # from CFG's max_post_chars
 
 
+def test_post_article_grounds_numbers_in_title():
+    store = FakeStore()
+    store.articles = {
+        "Timeline_of_events_(before_1500)": _article(LEAD, ["One", "Two"]),
+    }
+    db, pub = FakeDB(), FakePub()
+    llm = FakeLLM()
+    # 1500 is in the article TITLE, not the lead; the model is shown the
+    # title, so it counts as a grounded number (guards.ok gets title+source).
+    llm.draft = "A survey of the upheavals before 1500."
+    agent = _agent(store, db, llm, pub)
+    assert post_article(agent, "geography", "Timeline_of_events_(before_1500)") is not None
+    assert len(pub.posts) == 1
+
+
 def test_tick_skips_when_guard_fails():
     store, db, pub = _store_one_article(), FakeDB(), FakePub()
     llm = FakeLLM()

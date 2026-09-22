@@ -9,6 +9,12 @@ def test_nums_normalises_commas():
     assert _nums("no digits here") == set()
 
 
+def test_nums_ignores_sentence_final_period():
+    # 'in 2003.' must not tokenise as '2003.' — the full stop is punctuation
+    assert _nums("It happened in 2003.") == {"2003"}
+    assert _nums("Released in 1969. Then 1970.") == {"1969", "1970"}
+
+
 def test_ok_accepts_grounded_draft():
     agent = SimpleNamespace(id="atlas")
     # every number in the draft (9.2) appears verbatim in the source

@@ -13,8 +13,12 @@ from marginalia.skills import safety as _safety
 
 
 def _nums(s: str) -> set[str]:
-    """Every number in s, commas stripped, as a set (so '9,200,000' == '9200000')."""
-    return {n.replace(",", "") for n in re.findall(r"\d[\d,]*\.?\d*", s)}
+    """Every number in s, commas stripped, as a set (so '9,200,000' == '9200000').
+
+    A trailing full stop is not part of the number ('in 2003.' -> '2003'), so
+    numbers ending a sentence are not mis-tokenised as '2003.'.
+    """
+    return {n.replace(",", "") for n in re.findall(r"\d[\d,]*(?:\.\d+)?", s)}
 
 
 # A dosing figure (e.g. "500 mg", "2 ml") must never reach a medicine post.
