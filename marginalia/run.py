@@ -33,6 +33,7 @@ from marginalia.agent import Agent, poll, post_article, tick
 from marginalia.llm import LLM
 from marginalia.publisher import Publisher
 from marginalia.skills import dates as sk_dates
+from marginalia import ops
 from marginalia.state import State
 from marginalia.zimstore import ZimLibrary
 
@@ -99,6 +100,15 @@ def date_job(agent: Agent) -> None:
         log.exception("date %s failed", agent.id)
 
 
+def ops_job(cfg, db, agents, llm) -> None:
+    """Periodic ops checks; one WARNING log line per problem (marginalia-ops)."""
+    try:
+        for warning in ops.check_all(cfg, db, agents, llm):
+            log.warning("OPS: %s", warning)
+    except Exception:
+        log.exception("ops check failed")
+
+
 def refresh_job(cfg_path: str) -> None:
     """Monthly ZIM rotation; subprocess so a hung download stays contained."""
     log.info("monthly ZIM refresh: starting")
@@ -111,8 +121,8 @@ def refresh_job(cfg_path: str) -> None:
 
 # -- scheduler -----------------------------------------------------------------
 def build_scheduler(cfg, agents, cfg_path: str = "agents.yaml",
-                    now: datetime | None = None) -> BlockingScheduler:
-    """The full job table: posting, polling, date article, monthly refresh."""
+                    now: datetime | None = None, db=None, llm=None) -> BlockingScheduler:
+    """The full job table: posting, polling, date article, monthly refresh, ops."""
     now = now or datetime.now()
     sched = BlockingScheduler()
     poll_every = int(cfg.get("defaults", {}).get("poll_seconds", 45))
@@ -142,6 +152,14 @@ def build_scheduler(cfg, agents, cfg_path: str = "agents.yaml",
         refresh_job, CronTrigger(day=1, hour=3, minute=30),
         args=[cfg_path], id="zim-refresh", name="monthly ZIM refresh",
         max_instances=1, coalesce=True, misfire_grace_time=24 * 3600)
+
+    # First ops check 15 min after boot (after the first posting round has
+    # had a chance to complete), then every 6 h.
+    sched.add_job(
+        ops_job, IntervalTrigger(hours=6),
+        args=[cfg, db, agents, llm], id="ops", name="ops checks",
+        next_run_time=now + timedelta(minutes=15),
+        max_instances=1, coalesce=True, misfire_grace_time=3600)
     return sched
 
 
@@ -154,7 +172,8 @@ def main(cfg_path: str = "agents.yaml") -> None:
         log.error("no agents have tokens; nothing to do (set MK_TOKEN_* env vars)")
         return
     log.info("scheduling %d agents: %s", len(agents), ", ".join(a.id for a in agents))
-    build_scheduler(cfg, agents, cfg_path).start()    # blocks forever
+    llm = agents[0].llm          # shared by every agent
+    build_scheduler(cfg, agents, cfg_path, db=db, llm=llm).start()    # blocks forever
 
 
 if __name__ == "__main__":
