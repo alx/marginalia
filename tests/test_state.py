@@ -53,3 +53,28 @@ def test_licence_cache():
         assert db.licence("Poster.jpg") == (True, "Poster.jpg, anon, CC BY-SA")
     finally:
         db.close(); os.remove(p)
+
+
+def test_cross_thread_access():
+    """run.py shares one State across APScheduler worker threads; the
+    connection must be usable from a thread other than the one that made it."""
+    import threading
+    db, p = _db()
+    errors = []
+    try:
+        def worker():
+            try:
+                db.save_post("atlas", "geography", "Deserts", "n1", "b1",
+                             None, "book", "2026-07", title="Deserts")
+                assert db.seen("atlas", "Deserts")
+                db.set_cursor("atlas", "mention_cursor", "n1")
+                assert db.get_cursor("atlas", "mention_cursor") == "n1"
+            except Exception as e:
+                errors.append(e)
+        t = threading.Thread(target=worker)
+        t.start(); t.join()
+        assert not errors, errors
+        # main thread can still use it afterwards
+        assert db.seen("atlas", "Deserts")
+    finally:
+        db.close(); os.remove(p)

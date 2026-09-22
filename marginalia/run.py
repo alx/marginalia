@@ -29,7 +29,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from marginalia.agent import Agent, post_article, tick
+from marginalia.agent import Agent, poll, post_article, tick
 from marginalia.llm import LLM
 from marginalia.publisher import Publisher
 from marginalia.skills import dates as sk_dates
@@ -76,7 +76,7 @@ def post_job(agent: Agent) -> None:
 def poll_job(agent: Agent) -> None:
     """One reply pass for one agent (poll() itself checks the LLM)."""
     try:
-        if (n := agent.poll()):
+        if (n := poll(agent)):
             log.info("poll %s: answered %d", agent.id, n)
     except Exception:
         log.exception("poll %s failed", agent.id)

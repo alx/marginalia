@@ -11,6 +11,7 @@ which already exposes ``execute``/``commit``.
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 
 _SCHEMA = """
@@ -25,12 +26,45 @@ CREATE TABLE IF NOT EXISTS image_licences (file TEXT PRIMARY KEY, ok INTEGER, cr
 """
 
 
+class _LockedConn:
+    """A sqlite3.Connection serialized for use across scheduler threads.
+
+    ``run.py`` shares one State across APScheduler's worker threads; the
+    underlying connection is opened with ``check_same_thread=False`` and
+    every operation takes a lock so only one thread touches it at a time.
+    """
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+        self._lock = threading.Lock()
+
+    def execute(self, sql, *args, **kwargs):
+        with self._lock:
+            return self._conn.execute(sql, *args, **kwargs)
+
+    def executescript(self, sql):
+        with self._lock:
+            return self._conn.executescript(sql)
+
+    def commit(self):
+        with self._lock:
+            self._conn.commit()
+
+    def close(self):
+        with self._lock:
+            self._conn.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 class State:
     """Thin wrapper over the SQLite database with the named helpers the loops use."""
 
     def __init__(self, path: str = "state.sqlite"):
-        self.conn = sqlite3.connect(path)
-        self.conn.row_factory = sqlite3.Row
+        raw = sqlite3.connect(path, check_same_thread=False)
+        raw.row_factory = sqlite3.Row
+        self.conn = _LockedConn(raw)
         self.conn.executescript(_SCHEMA)
         self.conn.commit()
 
