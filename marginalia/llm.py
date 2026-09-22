@@ -73,14 +73,20 @@ class LLM:
         return content
 
     # -- drafting (spec §5) -------------------------------------------------
-    def write_post(self, persona: str, skills: list[str], title: str, source: str) -> str:
-        """Draft a ~320-char post grounded in the lead text only."""
+    def write_post(self, persona: str, skills: list[str], title: str, source: str,
+                   extra: str | None = None) -> str:
+        """Draft a ~320-char post grounded in the provided text only.
+
+        ``extra`` carries the active skills' drafting constraints (spec §4.7).
+        """
         system = (
             f"You are {persona}. Write one short social-media post, at most 320 characters, "
             "sharing one concrete, interesting fact from the article text. "
             "Use ONLY the provided text. Do not add facts, and do not invent links, "
             "sources or statistics. No hashtags, no leading or trailing whitespace."
         )
+        if extra:
+            system += f" Also: {extra}"
         user = f"Article title: {title}\n\nArticle text:\n{source}\n\nWrite the post."
         return self.complete(system, user, temperature=0.8, max_tokens=220)
 

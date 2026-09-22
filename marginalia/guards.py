@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import re
 
+from marginalia.skills import dates as _dates
+from marginalia.skills import safety as _safety
+
 
 def _nums(s: str) -> set[str]:
     """Every number in s, commas stripped, as a set (so '9,200,000' == '9200000')."""
@@ -23,10 +26,17 @@ def ok(draft: str, source: str, agent, limit: int = 320) -> bool:
 
     * within ``limit`` characters;
     * every number in the draft already appears in ``source`` (no invented stats);
-    * for ``mycelia``, no dosing figures.
+    * no dosing figures for ``mycelia`` or any agent carrying the safety skill;
+    * no advice phrasing, no rounded uncertain dates (safety / dates skills).
     """
     if len(draft) > limit or not _nums(draft) <= _nums(source):
         return False
-    if getattr(agent, "id", None) == "mycelia" and DOSE.search(draft):
+    sk = getattr(agent, "skills", None) or []
+    if getattr(agent, "id", None) == "mycelia" or "safety" in sk:
+        if DOSE.search(draft):
+            return False
+    if "safety" in sk and _safety.ADVICE.search(draft):
+        return False
+    if "dates" in sk and _dates.rounding_violation(draft, source):
         return False
     return True

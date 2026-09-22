@@ -9,7 +9,8 @@ import pytest
 
 from marginalia import extract
 from marginalia.agent import (Agent, _internal_link_paths, answer, climb_to_root,
-                              path_title, pick_candidate, poll, tick, wiki_url)
+                              path_title, pick_candidate, poll, post_article,
+                              tick, wiki_url)
 
 LEAD = (
     "The Sahara covers about 9.2 million square kilometres, making it the largest "
@@ -122,6 +123,7 @@ class FakeLLM:
         self.online = True
         self.classify_result = "question"
         self.last_ground = None
+        self.reply_calls = 0
 
     def is_online(self):
         return self.online
@@ -130,11 +132,14 @@ class FakeLLM:
         return self.classify_result
 
     def reply(self, persona, intent, question, grounded):
+        self.reply_calls += 1
         self.last_ground = grounded
         return f"reply({intent}) :: {grounded[:30]}"
 
-    def write_post(self, persona, skills, title, source):
+    def write_post(self, persona, skills, title, source, extra=None):
         self.calls += 1
+        self.last_source = source
+        self.last_extra = extra
         return self.draft
 
     def write_build_note(self, persona, title, left_out):
@@ -265,6 +270,71 @@ def test_tick_skips_when_guard_fails():
     assert tick(agent) is None
     assert pub.posts == []                    # nothing published
     assert llm.calls == 2                     # drafted, retried once, gave up
+
+
+# -- skill wiring (spec §4.7) -------------------------------------------------
+CFG_SKILLS = {
+    "images": {"mode": "none"},
+    "defaults": {"max_post_chars": 320},
+    "agents": {
+        "atlas": {
+            "topics": ["geography"], "hashtags": "#geography",
+            "seeds": ["List of things"],
+            "skills": ["units", "coordinates", "infobox"],
+            "posts_per_day": 1,
+        },
+        "mycelia": {
+            "topics": ["medicine"], "hashtags": "#medicine",
+            "seeds": [], "skills": ["safety"], "posts_per_day": 1,
+        },
+    },
+}
+
+
+def _article_with_box(lead, heads, box_rows):
+    rows = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in box_rows)
+    h = ('<html><body><div id="content">'
+         f'<section data-mw-section-id="0"><p>{lead}</p>'
+         f'<table class="infobox"><tbody>{rows}</tbody></table></section>')
+    for i, x in enumerate(heads, start=1):
+        h += (f'<section data-mw-section-id="{i}">'
+              f'<h2>{x}</h2><p>body of {x}</p></section>')
+    return h + '</div></body></html>'
+
+
+def test_post_article_applies_units_and_coordinates_and_infobox():
+    store = FakeStore()
+    store.articles = {"Alpha": _article_with_box(
+        LEAD, ["One", "Two"],
+        [("Area", "9.2 million square kilometres"),
+         ("Coordinates", "23°24′N 55°36′E")])}
+    db, pub = FakeDB(), FakePub()
+    llm = FakeLLM()
+    llm.draft = "It covers 9.2 million square kilometres."
+    lib = FakeLib({"geography": store})
+    agent = Agent("atlas", CFG_SKILLS, db, lib, llm, pub)
+    assert post_article(agent, "geography", "Alpha") is not None
+    text = pub.posts[0][0]
+    assert "9.2 million square kilometres (≈ 3,552,138 square miles)" in text
+    assert "Coordinates: 23.4, 55.6" in text
+    # infobox skill: the infobox card was offered to the model as source
+    assert "Area: 9.2 million square kilometres" in llm.last_source
+
+
+def test_answer_refuses_personal_health_for_safety_agents():
+    store = FakeStore()
+    store.articles = {"Alpha": _article(LEAD, ["One", "Two"])}
+    db, pub = FakeDB(), FakePub()
+    pub.notes["N1"] = {"id": "N1", "replyId": None}
+    db.save_post("mycelia", "medicine", "Alpha", "N1", "B1", None,
+                 store.book, store.date, title="Alpha")
+    llm = FakeLLM()
+    lib = FakeLib({"medicine": store})
+    agent = Agent("mycelia", CFG_SKILLS, db, lib, llm, pub)
+    r = answer(agent, db.post_by_note("N1"),
+               {"text": "I took 500 mg and I feel dizzy, is that normal?"})
+    assert "clinician" in r
+    assert llm.reply_calls == 0            # refusal before any model call
 
 
 # -- reply loop (spec §6) ---------------------------------------------------

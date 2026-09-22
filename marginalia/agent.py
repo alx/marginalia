@@ -10,7 +10,14 @@ import posixpath
 import random
 import re
 
-from marginalia import extract, guards, images
+from marginalia import extract, guards, images, skills
+from marginalia.skills import coordinates as sk_coordinates
+from marginalia.skills import dates as sk_dates
+from marginalia.skills import infobox as sk_infobox
+from marginalia.skills import living_person as sk_living_person
+from marginalia.skills import safety as sk_safety
+from marginalia.skills import spoilers as sk_spoilers
+from marginalia.skills import units as sk_units
 
 
 # Boilerplate trailing sections we never offer as a build-note follow-up.
@@ -57,6 +64,8 @@ class Agent:
 
     def cw_for(self, soup):
         """Content warning for this article, or None (Palette: spoilers)."""
+        if skills.has(self.skills, "spoilers"):
+            return sk_spoilers.cw_for(soup)
         return None
 
 
@@ -138,29 +147,62 @@ def pick_candidate(agent):
 
 
 # -- posting loop (spec §5) -------------------------------------------------
-def tick(agent) -> str | None:
-    """One posting iteration. Returns the note id, or None if nothing posted."""
-    db, lib, llm, pub, cfg = agent.db, agent.lib, agent.llm, agent.pub, agent.cfg
+def _draft_context(agent, soup) -> tuple[str, str | None]:
+    """(source text for the model, drafting constraints) for this article.
 
+    The source is the lead, plus the infobox card when the agent carries the
+    infobox skill, so infobox measurements are hooks the number guard accepts.
+    Constraints are the skill modules' drafting instructions, joined.
+    """
+    source = extract.lead(soup)
+    extra: list[str] = []
+    box = extract.infobox(soup)
+    if skills.has(agent.skills, "infobox") and (card := sk_infobox.card(box)):
+        source += f"\nFacts: {card}"
+    if skills.has(agent.skills, "dates"):
+        extra.append(sk_dates.CONSTRAINT)
+    if skills.has(agent.skills, "safety"):
+        extra.append(sk_safety.CONSTRAINT)
+    if skills.has(agent.skills, "spoilers"):
+        extra.append(sk_spoilers.CONSTRAINT)
+    if skills.has(agent.skills, "living_person") and sk_living_person.is_living(box):
+        extra.append(sk_living_person.CONSTRAINT)
+    return source, " ".join(extra) or None
+
+
+def tick(agent) -> str | None:
+    """One posting iteration: pick a candidate article, then post it."""
     picked = pick_candidate(agent)
     if not picked:
         return None
-    topic, path = picked
-    store = lib.stores[topic]
-    got = store.html(path)
-    if not got:
+    return post_article(agent, *picked)
+
+
+def post_article(agent, topic: str, path: str) -> str | None:
+    """Draft, guard, picture, publish and build-note one specific article.
+
+    Returns the note id, or None if nothing was posted (guards failed, no
+    article, ...). ``tick`` is pick_candidate + this; the scheduler's morning
+    date-article job calls it directly with today's date article.
+    """
+    db, lib, llm, pub, cfg = agent.db, agent.lib, agent.llm, agent.pub, agent.cfg
+
+    store = lib.stores.get(topic)
+    if not store or not (got := store.html(path)):
         return None
     _, html = got
     soup = extract.parse(html)
-    lead_text = extract.lead(soup)
     heads = extract.headings(soup)
     title = path_title(path)
 
+    source, extra = _draft_context(agent, soup)
     limit = cfg["defaults"]["max_post_chars"]
-    draft = llm.write_post(agent.persona, agent.skills, title=title, source=lead_text)
-    if not guards.ok(draft, lead_text, agent, limit):       # grounding / length / safety
-        draft = llm.write_post(agent.persona, agent.skills, title=title, source=lead_text)
-        if not guards.ok(draft, lead_text, agent, limit):
+    draft = llm.write_post(agent.persona, agent.skills, title=title, source=source,
+                           extra=extra)
+    if not guards.ok(draft, source, agent, limit):       # grounding / length / safety
+        draft = llm.write_post(agent.persona, agent.skills, title=title, source=source,
+                               extra=extra)
+        if not guards.ok(draft, source, agent, limit):
             return None
 
     pic = None
@@ -172,6 +214,13 @@ def tick(agent) -> str | None:
     if pic:
         text += f"\nImage: {pic['credit']}"
     text += "\nText from Wikipedia, CC BY-SA 4.0"
+
+    # code-side skill augmentations, applied after the guards: converted units
+    # and the coordinate line are facts the model is not allowed to invent
+    if skills.has(agent.skills, "units"):
+        text = sk_units.augment(text)
+    if skills.has(agent.skills, "coordinates") and (line := sk_coordinates.from_infobox(extract.infobox(soup))):
+        text += f"\n{line}"
 
     cw = agent.cw_for(soup)
     file_ids = [pub.upload(pic, sensitive=agent.sensitive_images)] if pic else None
@@ -238,6 +287,8 @@ def answer(agent, post, n) -> str:
     llm, text = agent.llm, n.get("text", "")
     if not text.strip():
         return ""
+    if skills.has(agent.skills, "safety") and sk_safety.needs_refusal(text):
+        return sk_safety.refusal(text)                 # personal health / crisis
     intent = llm.classify(text)
     grounded = _ground(agent, post, text)
     reply = llm.reply(agent.persona, intent, text, grounded)
