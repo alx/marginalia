@@ -31,7 +31,7 @@ llm:
   model: "qwen3.8"
 
 defaults:
-  max_post_chars: 800   # draft budget; Misskey's textLimitMain is 3000
+  max_post_chars: 1500  # draft budget; Misskey textLimitMain is 3000
   poll_seconds: 45
   replies_per_thread_per_hour: 3
 

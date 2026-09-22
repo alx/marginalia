@@ -199,13 +199,17 @@ def post_article(agent, topic: str, path: str) -> str | None:
 
     source, extra = _draft_context(agent, soup)
     limit = cfg["defaults"]["max_post_chars"]
-    draft = llm.write_post(agent.persona, agent.skills, title=title, source=source,
+    # up to three draft attempts: a longer draft carries more numbers, so the
+    # grounding guard rejects more often; each retry is cheap (one LLM call)
+    draft = None
+    for _ in range(3):
+        d = llm.write_post(agent.persona, agent.skills, title=title, source=source,
                            extra=extra, limit=limit)
-    if not guards.ok(draft, source, agent, limit):       # grounding / length / safety
-        draft = llm.write_post(agent.persona, agent.skills, title=title, source=source,
-                               extra=extra, limit=limit)
-        if not guards.ok(draft, source, agent, limit):
-            return None
+        if guards.ok(d, source, agent, limit):           # grounding / length / safety
+            draft = d
+            break
+    if draft is None:
+        return None
 
     pic = None
     if cfg["images"]["mode"] != "none":

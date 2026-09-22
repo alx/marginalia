@@ -81,9 +81,11 @@ class LLM:
         """
         system = (
             f"You are {persona}. Write one social-media post of at most {limit} characters, "
-            "sharing one or two concrete, interesting facts from the article text. "
+            "sharing concrete, interesting facts from the article text. "
             "Use ONLY the provided text. Do not add facts, and do not invent links, "
-            "sources or statistics. No hashtags, no leading or trailing whitespace."
+            "sources or statistics. Copy every number exactly as it appears in the "
+            "article text — same digits, commas and units. Never round, convert or "
+            "compute a number. No hashtags, no leading or trailing whitespace."
         )
         if extra:
             system += f" Also: {extra}"

@@ -22,7 +22,7 @@ assert len(LEAD) >= 300
 
 CFG = {
     "images": {"mode": "none"},
-    "defaults": {"max_post_chars": 800},
+    "defaults": {"max_post_chars": 1500},
     "agents": {
         "atlas": {
             "topics": ["geography"], "hashtags": "#geography",
@@ -119,6 +119,7 @@ class FakeDB:
 class FakeLLM:
     def __init__(self):
         self.draft = "The Sahara is vast and dry."      # no numbers -> guard passes
+        self.drafts = []                                # optional: return in order
         self.calls = 0
         self.online = True
         self.classify_result = "question"
@@ -141,7 +142,7 @@ class FakeLLM:
         self.last_source = source
         self.last_extra = extra
         self.last_limit = limit
-        return self.draft
+        return self.drafts.pop(0) if self.drafts else self.draft
 
     def write_build_note(self, persona, title, left_out):
         return "Left out " + ", ".join(left_out) + "."
@@ -269,7 +270,7 @@ def test_tick_passes_config_limit_to_llm():
     llm = FakeLLM()
     agent = _agent(store, db, llm, pub)
     tick(agent)
-    assert llm.last_limit == 800               # from CFG's max_post_chars
+    assert llm.last_limit == 1500          # from CFG's max_post_chars
 
 
 def test_tick_skips_when_guard_fails():
@@ -279,13 +280,24 @@ def test_tick_skips_when_guard_fails():
     agent = _agent(store, db, llm, pub)
     assert tick(agent) is None
     assert pub.posts == []                    # nothing published
-    assert llm.calls == 2                     # drafted, retried once, gave up
+    assert llm.calls == 3                     # three attempts, then gave up
+
+
+def test_tick_recovers_on_second_draft():
+    store, db, pub = _store_one_article(), FakeDB(), FakePub()
+    llm = FakeLLM()
+    # first draft fails the number guard, the retry is grounded -> posted
+    llm.drafts = ["It sits 999 metres up.", "It sits 9.2 million sq km-ish."]
+    agent = _agent(store, db, llm, pub)
+    assert tick(agent) is not None
+    assert llm.calls == 2
+    assert len(pub.posts) == 1
 
 
 # -- skill wiring (spec §4.7) -------------------------------------------------
 CFG_SKILLS = {
     "images": {"mode": "none"},
-    "defaults": {"max_post_chars": 800},
+    "defaults": {"max_post_chars": 1500},
     "agents": {
         "atlas": {
             "topics": ["geography"], "hashtags": "#geography",
