@@ -93,6 +93,9 @@ class FakeDB:
     def seen(self, agent, path):
         return (agent, path) in self.seen_paths
 
+    def mark_seen(self, agent, path):
+        self.seen_paths.add((agent, path))
+
     def save_post(self, agent, topic, path, note_id, build_note_id, image_file,
                   zim_book, zim_date, title=None, text=None):
         self.seen_paths.add((agent, path))

@@ -225,6 +225,9 @@ def post_article(agent, topic: str, path: str) -> str | None:
     if agent.editorial is not None:
         res = agent.editorial.gate(agent, topic, path, title, source, draft, limit)
         if res["outcome"] == "pending":
+            # queued for human approval: remember the article so the next
+            # cycle moves on instead of staging the same draft twice
+            agent.db.mark_seen(agent.id, path)
             return None
         draft, epic = res["draft"], res["epic"]
 

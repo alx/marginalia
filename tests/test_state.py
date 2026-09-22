@@ -136,3 +136,18 @@ def test_old_schema_migrates_posts_text():
         db.close()
     finally:
         os.remove(p)
+
+
+def test_mark_seen_without_post_row():
+    db, p = _db()
+    try:
+        assert not db.seen("atlas", "Mars")
+        db.mark_seen("atlas", "Mars")
+        assert db.seen("atlas", "Mars")
+        assert not db.seen("quark", "Mars")
+        # a real post still counts and does not duplicate
+        db.save_post("atlas", "geography", "Mars", "n1", None, None,
+                     "book", "2026-07", title="Mars")
+        assert db.seen("atlas", "Mars")
+    finally:
+        db.close(); os.remove(p)

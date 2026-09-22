@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS posts (
   text TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS posts_once ON posts(agent, path);
+CREATE TABLE IF NOT EXISTS seen_articles (agent TEXT, path TEXT, PRIMARY KEY (agent, path));
 CREATE TABLE IF NOT EXISTS cursors (agent TEXT, key TEXT, value TEXT, PRIMARY KEY (agent, key));
 CREATE TABLE IF NOT EXISTS replies (incoming_note_id TEXT PRIMARY KEY, reply_note_id TEXT, agent TEXT);
 CREATE TABLE IF NOT EXISTS image_licences (file TEXT PRIMARY KEY, ok INTEGER, credit TEXT);
@@ -112,10 +113,25 @@ class State:
         return dict(row) if row else None
 
     def seen(self, agent, path) -> bool:
-        """True if this agent already posted this article path."""
+        """True if this agent already posted (or is queueing) this article."""
         row = self.conn.execute(
             "SELECT 1 FROM posts WHERE agent=? AND path=?", (agent, path)).fetchone()
-        return row is not None
+        if row is not None:
+            return True
+        return self.conn.execute(
+            "SELECT 1 FROM seen_articles WHERE agent=? AND path=?",
+            (agent, path)).fetchone() is not None
+
+    def mark_seen(self, agent, path) -> None:
+        """Remember an article without a post row (e.g. escalated to HITL).
+
+        Keeps the rotation from re-drafting an article that is sitting in
+        the approval queue, without polluting the recent-posts digest.
+        """
+        self.conn.execute(
+            "INSERT OR IGNORE INTO seen_articles (agent, path) VALUES (?,?)",
+            (agent, path))
+        self.conn.commit()
 
     # -- cursors -----------------------------------------------------------
     def get_cursor(self, agent, key, default=None):
