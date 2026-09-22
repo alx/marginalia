@@ -24,8 +24,8 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import yaml
 from apscheduler.schedulers.blocking import BlockingScheduler
+from marginalia.config import load_config
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -48,7 +48,7 @@ MORNING_HOUR, MORNING_MINUTE = 8, 30   # Chronicle's "on this day" post
 # -- building the pieces ------------------------------------------------------
 def build(cfg_path: str = "agents.yaml"):
     """Load config, state, library, the editorial gate, and the tokened agents."""
-    cfg = yaml.safe_load(Path(cfg_path).read_text())
+    cfg = load_config(cfg_path)
     db = State(cfg.get("state", "state.sqlite"))
     lib = ZimLibrary(cfg["zim"]["dir"])
     llm = LLM(cfg["llm"]["base_url"], cfg["llm"]["model"],

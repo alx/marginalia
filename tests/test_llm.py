@@ -8,7 +8,8 @@ import requests
 
 from marginalia.llm import LLM, extract_class, parse_verdict
 
-ENDPOINT = "http://llm.internal:8081/v1"
+# Live e2e endpoint, per machine: set LLM_E2E_ENDPOINT to the real URL.
+ENDPOINT = os.environ.get("LLM_E2E_ENDPOINT", "http://127.0.0.1:8081/v1")
 MODEL = "qwen3.8"
 
 

@@ -18,7 +18,8 @@ import time
 from pathlib import Path
 
 import requests
-import yaml
+
+from marginalia.config import load_config
 
 BASE = "https://dumps.wikimedia.org/other/kiwix/zim/wikipedia/"
 HEADERS = {"User-Agent": "marginalia-agents/0.1 (local mirror; contact: you@example.org)"}
@@ -86,7 +87,7 @@ def download(name: str, dest: Path, size: int) -> None:
 
 def main(cfg_path: str = "agents.yaml", dry_run: bool = False) -> None:
     """Fetch/rotate every topic in agents.yaml into zim.dir, updating manifest.json."""
-    cfg = yaml.safe_load(open(cfg_path))
+    cfg = load_config(cfg_path)
     dest = Path(cfg["zim"]["dir"])
     manifest_path = dest / "manifest.json"
     manifest = json.load(open(manifest_path)) if manifest_path.exists() else {}

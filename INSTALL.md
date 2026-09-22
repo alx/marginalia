@@ -62,6 +62,10 @@ MK_TOKEN_PALETTE=...
 MK_TOKEN_LEXIS=...
 MK_TOKEN_EDITOR=...
 MK_ADMIN_USER_ID=...      # the admin's Misskey *user id* (aref… form), not username
+
+# Per-machine endpoints that override the placeholders in agents.yaml:
+MK_HOST=127.0.0.1:8300    # Misskey origin:port for this box
+LLM_BASE_URL=http://127.0.0.1:8081/v1   # OpenAI-compatible LLM endpoint
 ```
 
 `chmod 600 .env`. The admin user id is visible in the instance admin UI or
@@ -158,9 +162,10 @@ Dependencies: `Misskey.py`, `libzim`, `beautifulsoup4`, `PyYAML`,
 wheels).
 
 Create `.env` (chmod 600) with the `MK_TOKEN_*` / `MK_TOKEN_EDITOR` /
-`MK_ADMIN_USER_ID` values from step 1 — nothing else is secret. `agents.yaml`
-is committed and holds the rest (Misskey host, ZIM dir, LLM endpoint, agent
-roster).
+`MK_ADMIN_USER_ID` values from step 1, plus the per-machine endpoints
+`MK_HOST` and `LLM_BASE_URL` (they override the placeholders in the committed
+`agents.yaml`; see `marginalia/config.py`). The ZIM dir and agent roster stay
+in `agents.yaml`.
 
 Run the test suite before first start:
 

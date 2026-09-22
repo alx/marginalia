@@ -20,7 +20,9 @@ images:
   allow: ["cc by", "cc0", "public domain", "pd"]   # only used by licence_check
 
 misskey:
-  host: "127.0.0.1:8300"  # private instance on lamai270, bound to the tailnet IP
+  # Private Misskey origin:port. This committed default is a placeholder —
+  # every machine overrides it with MK_HOST in .env (see marginalia/config.py).
+  host: "127.0.0.1:8300"
   ssl: false
 
 # kiwix_serve:                   # optional, for offline "full article" links
@@ -32,7 +34,9 @@ misskey:
 # Both are env vars — never in this file.
 
 llm:
-  base_url: "http://llm.internal:8081/v1"   # llama.cpp OpenAI-compatible, on the tailnet
+  # OpenAI-compatible endpoint (llama.cpp). Placeholder — override per
+  # machine with LLM_BASE_URL in .env (see marginalia/config.py).
+  base_url: "http://127.0.0.1:8081/v1"
   model: "qwen3.8"
   # long-form generations can exceed 2 minutes on the single-slot llama.cpp
   timeout: 300
