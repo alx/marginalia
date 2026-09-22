@@ -179,11 +179,13 @@ def tick(agent) -> str | None:
 
 
 def post_article(agent, topic: str, path: str) -> str | None:
-    """Draft, guard, picture, publish and build-note one specific article.
+    """Draft, guard, picture and publish one specific article.
 
-    Returns the note id, or None if nothing was posted (guards failed, no
-    article, ...). ``tick`` is pick_candidate + this; the scheduler's morning
-    date-article job calls it directly with today's date article.
+    The build note (spec §5) is folded into the post as a trailing
+    conversation hook instead of a self-reply. Returns the note id, or None
+    if nothing was posted (guards failed, no article, ...). ``tick`` is
+    pick_candidate + this; the scheduler's morning date-article job calls it
+    directly with today's date article.
     """
     db, lib, llm, pub, cfg = agent.db, agent.lib, agent.llm, agent.pub, agent.cfg
 
@@ -198,10 +200,10 @@ def post_article(agent, topic: str, path: str) -> str | None:
     source, extra = _draft_context(agent, soup)
     limit = cfg["defaults"]["max_post_chars"]
     draft = llm.write_post(agent.persona, agent.skills, title=title, source=source,
-                           extra=extra)
+                           extra=extra, limit=limit)
     if not guards.ok(draft, source, agent, limit):       # grounding / length / safety
         draft = llm.write_post(agent.persona, agent.skills, title=title, source=source,
-                               extra=extra)
+                               extra=extra, limit=limit)
         if not guards.ok(draft, source, agent, limit):
             return None
 
@@ -210,7 +212,14 @@ def post_article(agent, topic: str, path: str) -> str | None:
         pic = images.first_usable(extract.images(soup, path), store, db,
                                   cfg["images"]["mode"], title)
 
-    text = f"{draft}\n\n[Full article]({wiki_url(topic, path)})  {agent.hashtags}"
+    # conversation hook (the old build note): names the sections not covered
+    # and invites a follow-up, folded into the post rather than a self-reply
+    unused = [h for h in heads if h.lower() not in USED_HEADINGS]
+    hook = ""
+    if unused:
+        hook = "\n" + llm.write_build_note(agent.persona, title=title, left_out=unused[:4])
+
+    text = f"{draft}{hook}\n\n[Full article]({wiki_url(topic, path)})  {agent.hashtags}"
     if pic:
         text += f"\nImage: {pic['credit']}"
     text += "\nText from Wikipedia, CC BY-SA 4.0"
@@ -226,11 +235,7 @@ def post_article(agent, topic: str, path: str) -> str | None:
     file_ids = [pub.upload(pic, sensitive=agent.sensitive_images)] if pic else None
     note_id = pub.post(text, cw=cw, file_ids=file_ids)
 
-    unused = [h for h in heads if h.lower() not in USED_HEADINGS]
-    build = llm.write_build_note(agent.persona, title=title, left_out=unused[:4])
-    build_id = pub.post(build, reply_id=note_id)
-
-    db.save_post(agent.id, topic, path, note_id, build_id,
+    db.save_post(agent.id, topic, path, note_id, None,
                  pic and pic["name"], store.book, store.date, title=title)
     return note_id
 

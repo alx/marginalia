@@ -22,7 +22,7 @@ assert len(LEAD) >= 300
 
 CFG = {
     "images": {"mode": "none"},
-    "defaults": {"max_post_chars": 320},
+    "defaults": {"max_post_chars": 800},
     "agents": {
         "atlas": {
             "topics": ["geography"], "hashtags": "#geography",
@@ -136,10 +136,11 @@ class FakeLLM:
         self.last_ground = grounded
         return f"reply({intent}) :: {grounded[:30]}"
 
-    def write_post(self, persona, skills, title, source, extra=None):
+    def write_post(self, persona, skills, title, source, extra=None, limit=320):
         self.calls += 1
         self.last_source = source
         self.last_extra = extra
+        self.last_limit = limit
         return self.draft
 
     def write_build_note(self, persona, title, left_out):
@@ -243,23 +244,32 @@ def _store_one_article():
     return store
 
 
-def test_tick_posts_note_and_build_note():
+def test_tick_posts_note_with_inline_hook():
     store, db, pub = _store_one_article(), FakeDB(), FakePub()
     agent = _agent(store, db, FakeLLM(), pub)
     note_id = tick(agent)
     assert note_id is not None
-    # two posts: the note, then the agent's own build-note reply
-    assert len(pub.posts) == 2
+    # exactly one post: the build-note hook is folded in, no self-reply
+    assert len(pub.posts) == 1
     note_text, note_reply, note_files, note_cw = pub.posts[0]
     assert note_reply is None and note_files is None
+    assert "Left out One, Two, Three, Four." in note_text
+    assert note_text.index("Left out") < note_text.index("[Full article]")
     assert "[Full article](https://en.wikipedia.org/wiki/Alpha)" in note_text
     assert "#geography" in note_text
     assert note_text.endswith("Text from Wikipedia, CC BY-SA 4.0")
-    build_text, build_reply, *_ = pub.posts[1]
-    assert build_reply == note_id            # build note replies to the post
-    assert "Left out One, Two, Three, Four." in build_text
     assert len(db.saved) == 1
-    assert db.saved[0][0] == "atlas" and db.saved[0][2] == "Alpha"
+    saved = db.saved[0]
+    assert saved[0] == "atlas" and saved[2] == "Alpha"
+    assert saved[3] == note_id and saved[4] is None    # no separate build note
+
+
+def test_tick_passes_config_limit_to_llm():
+    store, db, pub = _store_one_article(), FakeDB(), FakePub()
+    llm = FakeLLM()
+    agent = _agent(store, db, llm, pub)
+    tick(agent)
+    assert llm.last_limit == 800               # from CFG's max_post_chars
 
 
 def test_tick_skips_when_guard_fails():
@@ -275,7 +285,7 @@ def test_tick_skips_when_guard_fails():
 # -- skill wiring (spec §4.7) -------------------------------------------------
 CFG_SKILLS = {
     "images": {"mode": "none"},
-    "defaults": {"max_post_chars": 320},
+    "defaults": {"max_post_chars": 800},
     "agents": {
         "atlas": {
             "topics": ["geography"], "hashtags": "#geography",

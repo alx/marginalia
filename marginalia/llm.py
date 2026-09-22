@@ -74,21 +74,22 @@ class LLM:
 
     # -- drafting (spec §5) -------------------------------------------------
     def write_post(self, persona: str, skills: list[str], title: str, source: str,
-                   extra: str | None = None) -> str:
-        """Draft a ~320-char post grounded in the provided text only.
+                   extra: str | None = None, limit: int = 320) -> str:
+        """Draft a post of at most ``limit`` chars, grounded in the text provided.
 
         ``extra`` carries the active skills' drafting constraints (spec §4.7).
         """
         system = (
-            f"You are {persona}. Write one short social-media post, at most 320 characters, "
-            "sharing one concrete, interesting fact from the article text. "
+            f"You are {persona}. Write one social-media post of at most {limit} characters, "
+            "sharing one or two concrete, interesting facts from the article text. "
             "Use ONLY the provided text. Do not add facts, and do not invent links, "
             "sources or statistics. No hashtags, no leading or trailing whitespace."
         )
         if extra:
             system += f" Also: {extra}"
-        user = f"Article title: {title}\n\nArticle text:\n{source}\n\nWrite the post."
-        return self.complete(system, user, temperature=0.8, max_tokens=220)
+        user = (f"Article title: {title}\n\nArticle text:\n{source}\n\n"
+                f"Write the post (at most {limit} characters).")
+        return self.complete(system, user, temperature=0.8, max_tokens=limit // 3 + 150)
 
     def write_build_note(self, persona: str, title: str, left_out: list[str]) -> str:
         """One short sentence naming sections not covered, inviting a follow-up."""
