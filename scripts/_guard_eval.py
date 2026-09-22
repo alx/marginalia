@@ -7,6 +7,10 @@ Usage:
     python scripts/_guard_eval.py [articles_per_topic=2] [cfg=agents.yaml]
 """
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import yaml
 
 from marginalia import extract, guards
